@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+env/
+.env
+
+# Database & Personal Data
+data/*.db
+data/backups/
+logs/*.log
+
+# Packaging
+dist/
+build/
+*.spec
+
+# OS
+.DS_Store

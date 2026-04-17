@@ -1,0 +1,138 @@
+/* Genel Arka Plan ve Metinler */
+QMainWindow {
+    background-color: #F3F4F6;
+}
+
+QWidget {
+    color: #1F2937;
+    font-family: "Inter", sans-serif;
+}
+
+/* Sidebar */
+#sidebar {
+    background-color: #FFFFFF;
+    border-right: 1px solid #E5E7EB;
+}
+
+#logo_label {
+    font-size: 20px;
+    font-weight: 800;
+    color: #111827;
+    padding: 15px 10px;
+}
+
+/* Sidebar Navigasyon Butonları */
+QPushButton[objectName^="nav_btn_"] {
+    background-color: transparent;
+    color: #6B7280;
+    border: none;
+    text-align: left;
+    padding: 14px 20px;
+    font-size: 14px;
+    font-weight: 600;
+    border-left: 4px solid transparent;
+}
+
+QPushButton[objectName^="nav_btn_"]:hover {
+    background-color: #F9FAFB;
+    color: #111827;
+}
+
+QPushButton[objectName^="nav_btn_"]:checked {
+    background-color: #FEF2F2;
+    color: #E30A17;
+    border-left: 4px solid #E30A17; /* Türk kırmızısı aksan */
+}
+
+/* Kart Yüzeyleri */
+.CardWidget {
+    background-color: #FFFFFF;
+    border-radius: 10px;
+    border: 1px solid #E5E7EB;
+    padding: 16px;
+}
+
+.CardTitle {
+    color: #6B7280;
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.CardValue {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 26px;
+    font-weight: bold;
+    color: #111827;
+}
+
+.ProfitText {
+    color: #059669; /* Zümrüt Yeşili - Okunabilir */
+}
+
+.LossText {
+    color: #DC2626; /* Koyu Kırmızı/Vişne */
+}
+
+/* Tablo Stilleri */
+QTableView {
+    background-color: #FFFFFF;
+    alternate-background-color: #F9FAFB;
+    border: 1px solid #E5E7EB;
+    border-radius: 8px;
+    color: #111827;
+    gridline-color: #E5E7EB;
+    selection-background-color: #FEE2E2;
+    selection-color: #111827;
+}
+
+QTableView::item {
+    padding: 6px;
+}
+
+QHeaderView::section {
+    background-color: #F3F4F6;
+    color: #374151;
+    padding: 8px;
+    font-weight: bold;
+    border: none;
+    border-bottom: 1px solid #D1D5DB;
+    border-right: 1px solid #E5E7EB;
+}
+
+/* Form Elemanları (Inputs, Combos) */
+QLineEdit, QComboBox {
+    border: 1px solid #D1D5DB;
+    border-radius: 6px;
+    padding: 8px 12px;
+    background-color: #FFFFFF;
+    color: #111827;
+}
+
+QLineEdit:focus, QComboBox:focus {
+    border: 1px solid #00B5E2; /* Turkuaz Vurgu */
+    background-color: #FFFFFF;
+}
+
+QComboBox::drop-down {
+    border: none;
+}
+
+/* Butonlar */
+QPushButton {
+    border-radius: 6px;
+    padding: 8px 16px;
+    background-color: #F3F4F6;
+    border: 1px solid #D1D5DB;
+    color: #374151;
+    font-weight: 600;
+}
+
+QPushButton:hover {
+    background-color: #E5E7EB;
+}
+
+/* QDialog Pencereleri */
+QDialog {
+    background-color: #F9FAFB;
+}

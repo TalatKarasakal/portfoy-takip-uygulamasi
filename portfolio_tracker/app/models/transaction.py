@@ -1,0 +1,30 @@
+import enum
+from datetime import datetime
+from sqlalchemy import Column, Integer, ForeignKey, Enum, Date, Numeric, String, DateTime
+from sqlalchemy.orm import relationship
+from app.database.base import Base
+
+class TransactionType(enum.Enum):
+    BUY = "BUY"
+    SELL = "SELL"
+
+class Transaction(Base):
+    __tablename__ = "transactions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    asset_id = Column(Integer, ForeignKey("assets.id"), nullable=False)
+    transaction_type = Column(Enum(TransactionType), nullable=False)
+    date = Column(Date, nullable=False)
+    quantity = Column(Numeric(precision=18, scale=6), nullable=False)
+    unit_price = Column(Numeric(precision=18, scale=6), nullable=False)
+    commission = Column(Numeric(precision=18, scale=6), default=0, nullable=False)
+    tax = Column(Numeric(precision=18, scale=6), default=0, nullable=False)
+    note = Column(String(500), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    asset = relationship("Asset", back_populates="transactions")
+
+    @property
+    def total_cost(self):
+        base_amount = float(self.quantity) * float(self.unit_price)
+        return base_amount + float(self.commission) + float(self.tax)

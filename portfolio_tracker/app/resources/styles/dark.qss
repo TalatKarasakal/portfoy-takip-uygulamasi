@@ -1,0 +1,74 @@
+/* Genel Arka Plan ve Metinler */
+QMainWindow {
+    background-color: #0F1115;
+}
+
+QWidget {
+    color: #E5E7EB;
+    font-family: "Inter", sans-serif;
+}
+
+/* Sidebar */
+#sidebar {
+    background-color: #1A1D23;
+    border-right: 1px solid #2A2F38;
+}
+
+#logo_label {
+    font-size: 18px;
+    font-weight: bold;
+    color: #E5E7EB;
+    padding: 10px;
+}
+
+/* Sidebar Navigasyon Butonları */
+QPushButton[objectName^="nav_btn_"] {
+    background-color: transparent;
+    color: #9CA3AF;
+    border: none;
+    text-align: left;
+    padding: 12px 20px;
+    font-size: 14px;
+    font-weight: 500;
+    border-left: 4px solid transparent;
+}
+
+QPushButton[objectName^="nav_btn_"]:hover {
+    background-color: #2A2F38;
+    color: #E5E7EB;
+}
+
+QPushButton[objectName^="nav_btn_"]:checked {
+    background-color: #2A2F38;
+    color: #E5E7EB;
+    border-left: 4px solid #E30A17; /* Türk kırmızısı aksan */
+}
+
+/* Kart Yüzeyleri */
+.CardWidget {
+    background-color: #1A1D23;
+    border-radius: 8px;
+    border: 1px solid #2A2F38;
+    padding: 16px;
+}
+
+.CardTitle {
+    color: #9CA3AF;
+    font-size: 12px;
+    text-transform: uppercase;
+}
+
+.CardValue {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 24px;
+    font-weight: bold;
+    color: #E5E7EB;
+}
+
+.ProfitText {
+    color: #10B981;
+}
+
+.LossText {
+    color: #DC2626;
+}
