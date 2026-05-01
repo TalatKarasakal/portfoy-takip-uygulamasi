@@ -1,27 +1,39 @@
 import pandas as pd
 import datetime
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from app.models.asset import Asset, AssetType
 from app.models.transaction import Transaction, TransactionType
 from app.utils.logger import app_logger
+from app.services.bist_service import BistService
+from app.services.tefas_service import TefasService
 
 class ImportExportService:
     @staticmethod
     def export_excel(session: Session, file_path: str):
         """Tüm portföyü Excel'e dışa aktarır."""
-        # Portföy durumu (TODO: Güncel fiyatlar eklenecek)
+        # Portföy durumu
         assets = session.query(Asset).all()
+        bist_service = BistService()
+        tefas_service = TefasService()
+
         asset_data = []
         for a in assets:
+            current_price = None
+            if a.asset_type == AssetType.BIST:
+                current_price = bist_service.fetch_current_price(a.code)
+            elif a.asset_type == AssetType.TEFAS:
+                current_price = tefas_service.fetch_current_price(a.code)
+
             asset_data.append({
                 "Kod": a.code,
                 "Ad": a.name,
                 "Tür": a.asset_type.name,
-                "Para Birimi": a.currency
+                "Para Birimi": a.currency,
+                "Güncel Fiyat": current_price if current_price is not None else 0.0
             })
             
         # İşlemler
-        txs = session.query(Transaction).all()
+        txs = session.query(Transaction).options(joinedload(Transaction.asset)).all()
         tx_data = []
         for tx in txs:
             tx_data.append({
