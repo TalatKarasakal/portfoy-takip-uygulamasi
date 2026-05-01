@@ -80,19 +80,23 @@ class ImportExportService:
             return False
 
     @staticmethod
+    def _get_or_create_asset(session: Session, code: str, name: str = None) -> Asset:
+        asset = session.query(Asset).filter_by(code=code).first()
+        if not asset:
+            a_type = AssetType.BIST if len(code) >= 4 and len(code) <= 5 else AssetType.TEFAS
+            asset = Asset(code=code, name=name or code, asset_type=a_type)
+            session.add(asset)
+            session.flush()
+        return asset
+
+    @staticmethod
     def _process_full_transaction_history(session: Session, df: pd.DataFrame) -> bool:
         for index, row in df.iterrows():
             code = str(row.get("Kod", row.get("kod"))).strip().upper()
             if pd.isna(code) or not code:
                 continue
                 
-            asset = session.query(Asset).filter_by(code=code).first()
-            if not asset:
-                # Otomatik varlık oluşturma (Türünü belirleme heuristic)
-                a_type = AssetType.BIST if len(code) == 5 else AssetType.TEFAS
-                asset = Asset(code=code, name=code, asset_type=a_type)
-                session.add(asset)
-                session.flush()
+            asset = ImportExportService._get_or_create_asset(session, code)
                 
             ttype_str = str(row.get("Tür", row.get("tür", ""))).strip().upper()
             ttype = TransactionType.BUY if ttype_str in ["BUY", "AL", "ALIM"] else TransactionType.SELL
@@ -118,12 +122,7 @@ class ImportExportService:
             if pd.isna(code) or not code:
                 continue
                 
-            asset = session.query(Asset).filter_by(code=code).first()
-            if not asset:
-                a_type = AssetType.BIST if len(code) == 5 else AssetType.TEFAS
-                asset = Asset(code=code, name=code, asset_type=a_type)
-                session.add(asset)
-                session.flush()
+            asset = ImportExportService._get_or_create_asset(session, code)
 
             tx = Transaction(
                 asset_id=asset.id,
@@ -165,13 +164,7 @@ class ImportExportService:
             if not name or pd.isna(name) or name == 'NAN':
                 name = code
                 
-            asset = session.query(Asset).filter_by(code=code).first()
-            if not asset:
-                # BIST genellikle 5 hane (Örn: THYAO), Fonlar genelde 3 hane (Örn: AFT)
-                a_type = AssetType.BIST if len(code) >= 4 and len(code) <= 5 else AssetType.TEFAS
-                asset = Asset(code=code, name=name, asset_type=a_type)
-                session.add(asset)
-                session.flush() # ID'yi alabilmek için
+            asset = ImportExportService._get_or_create_asset(session, code, name)
                 
             # Eğer Tutar doldurulmuşsa bunu bir BUY işlemi olarak atalım (Miktar 1 birim)
             if tutar > 0 and not pd.isna(tutar):
