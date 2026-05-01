@@ -1,6 +1,6 @@
 import pandas as pd
 import datetime
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from app.models.asset import Asset, AssetType
 from app.models.transaction import Transaction, TransactionType
 from app.utils.logger import app_logger
@@ -21,7 +21,7 @@ class ImportExportService:
             })
             
         # İşlemler
-        txs = session.query(Transaction).all()
+        txs = session.query(Transaction).options(joinedload(Transaction.asset)).all()
         tx_data = []
         for tx in txs:
             tx_data.append({
