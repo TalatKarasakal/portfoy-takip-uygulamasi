@@ -64,10 +64,9 @@ class ImportExportService:
                 elif any("kod" in c for c in cols) and any("ad" in c for c in cols):
                     success_any = ImportExportService._process_assets_only(session, df) or success_any
                 
-                # Senaryo 1: Yüzdelik (Henüz Tam Aktif Değil)
+                # Senaryo 1: Yüzdelik
                 elif any("kod" in c for c in cols) and any("yüzde" in c for c in cols):
-                    # TODO: Yüzdelik portföy aktarımı.
-                    continue
+                    success_any = ImportExportService._process_percentage(session, df) or success_any
                     
             if not success_any:
                 app_logger.error("Uygun sütun formatı hiçbir sayfada bulunamadı.")
@@ -187,5 +186,50 @@ class ImportExportService:
                 )
                 session.add(tx)
                 
+        session.commit()
+        return True
+
+    @staticmethod
+    def _process_percentage(session: Session, df: pd.DataFrame) -> bool:
+        """Yüzdelik dağılım verilirse, varsayılan 100.000 TL portföy büyüklüğüne göre sanal BUY işlemi ekler."""
+        for index, row in df.iterrows():
+            code = None
+            yuzde = 0.0
+
+            for col in df.columns:
+                c_lower = str(col).lower()
+                if "kod" in c_lower:
+                    code = str(row[col]).strip().upper()
+                elif "yüzde" in c_lower or "yuzde" in c_lower:
+                    try:
+                        yuzde = float(row[col])
+                    except:
+                        pass
+
+            if not code or pd.isna(code) or code == 'NAN':
+                continue
+
+            if yuzde > 0:
+                tutar = (yuzde / 100.0) * 100000.0
+
+                asset = session.query(Asset).filter_by(code=code).first()
+                if not asset:
+                    a_type = AssetType.BIST if len(code) >= 4 and len(code) <= 5 else AssetType.TEFAS
+                    asset = Asset(code=code, name=code, asset_type=a_type)
+                    session.add(asset)
+                    session.flush()
+
+                tx = Transaction(
+                    asset_id=asset.id,
+                    transaction_type=TransactionType.BUY,
+                    date=datetime.date.today(),
+                    quantity=1.0,
+                    unit_price=tutar,
+                    commission=0,
+                    tax=0,
+                    note="Excel Import - Yüzdelik (100k Bazlı)"
+                )
+                session.add(tx)
+
         session.commit()
         return True

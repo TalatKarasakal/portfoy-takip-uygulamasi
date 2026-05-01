@@ -58,10 +58,10 @@ def test_import_qty_cost(mock_session, sample_excel_files):
     assert mock_session.add.called
     assert mock_session.commit.called
 
-def test_import_percent_raises(mock_session, sample_excel_files):
+def test_import_percent_success(mock_session, sample_excel_files):
     _, _, pct_path = sample_excel_files
     
-    # Beklentimiz, fonksiyonun hata fırlatması yerine gracefully False dönmesidir, 
-    # ya da NotImplemetedError'un yutulması. service kodunda try-except block var.
     result = ImportExportService.import_excel(mock_session, str(pct_path))
-    assert result == False
+    assert result == True
+    assert mock_session.add.called
+    assert mock_session.commit.called
