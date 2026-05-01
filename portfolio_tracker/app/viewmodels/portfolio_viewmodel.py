@@ -1,4 +1,6 @@
 import math
+from concurrent.futures import ThreadPoolExecutor
+from sqlalchemy.orm import joinedload
 from PySide6.QtCore import QObject, Signal, Slot, QThread
 from app.database.session import get_session
 from app.models.asset import Asset, AssetType
@@ -21,7 +23,7 @@ class PortfolioLoaderThread(QThread):
     def run(self):
         try:
             with get_session() as session:
-                assets = session.query(Asset).all()
+                assets = session.query(Asset).options(joinedload(Asset.transactions)).all()
                 portfolio_items = []
                 
                 total_value_try = 0.0
@@ -29,13 +31,21 @@ class PortfolioLoaderThread(QThread):
                 realized_pnl_total = 0.0
                 unrealized_pnl_total = 0.0
                 
-                for asset in assets:
+                def fetch_price(asset):
                     if asset.asset_type == AssetType.BIST:
-                        current_price = self.bist_service.fetch_current_price(asset.code, self.force_refresh)
+                        return asset, self.bist_service.fetch_current_price(asset.code, self.force_refresh)
                     else:
-                        current_price = self.tefas_service.fetch_current_price(asset.code, self.force_refresh)
-                        
-                    current_price = current_price or 0.0
+                        return asset, self.tefas_service.fetch_current_price(asset.code, self.force_refresh)
+
+                # Fetch prices concurrently
+                prices = {}
+                with ThreadPoolExecutor(max_workers=10) as executor:
+                    results = executor.map(fetch_price, assets)
+                    for asset, price in results:
+                        prices[asset.id] = price or 0.0
+
+                for asset in assets:
+                    current_price = prices.get(asset.id, 0.0)
                     
                     txs = asset.transactions
                     stats = PortfolioService.calculate_cost_and_pnl(txs, current_price, method=self.cost_method)
