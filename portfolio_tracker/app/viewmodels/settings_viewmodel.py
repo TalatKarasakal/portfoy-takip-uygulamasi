@@ -4,6 +4,7 @@ from app.models.settings import Settings
 from app.services.import_export_service import ImportExportService
 from app.services.backup_service import BackupService
 
+
 class SettingsViewModel(QObject):
     settings_loaded = Signal(dict)
     settings_saved = Signal()
@@ -16,7 +17,7 @@ class SettingsViewModel(QObject):
         "refresh_interval_minutes": "15",
         "cost_method": "WAC",
         "notifications_enabled": "1",
-        "language": "tr"
+        "language": "tr",
     }
 
     def load_settings(self):
@@ -33,12 +34,19 @@ class SettingsViewModel(QObject):
     def save_settings(self, new_settings: dict):
         try:
             with get_session() as session:
-                for k, v in new_settings.items():
-                    s = session.query(Settings).filter_by(key=k).first()
-                    if s:
-                        s.value = str(v)
-                    else:
-                        session.add(Settings(key=k, value=str(v)))
+                if new_settings:
+                    existing_settings = (
+                        session.query(Settings)
+                        .filter(Settings.key.in_(new_settings.keys()))
+                        .all()
+                    )
+                    existing_settings_dict = {s.key: s for s in existing_settings}
+
+                    for k, v in new_settings.items():
+                        if k in existing_settings_dict:
+                            existing_settings_dict[k].value = str(v)
+                        else:
+                            session.add(Settings(key=k, value=str(v)))
                 session.commit()
             self.settings_saved.emit()
             self.load_settings()
@@ -60,7 +68,9 @@ class SettingsViewModel(QObject):
             if success:
                 self.success_message.emit("İçeri aktarma işlemi başarıyla tamamlandı.")
             else:
-                self.error_occurred.emit("İçeri aktarma sırasında veri format hatası oluştu.")
+                self.error_occurred.emit(
+                    "İçeri aktarma sırasında veri format hatası oluştu."
+                )
         except Exception as e:
             self.error_occurred.emit(f"İçeri aktarma hatası: {str(e)}")
 
@@ -76,7 +86,9 @@ class SettingsViewModel(QObject):
     def restore_backup(self, path: str):
         try:
             if BackupService.restore_backup(path):
-                self.success_message.emit("Veritabanı başarıyla geri yüklendi. Uygulamayı yeniden başlatın.")
+                self.success_message.emit(
+                    "Veritabanı başarıyla geri yüklendi. Uygulamayı yeniden başlatın."
+                )
             else:
                 self.error_occurred.emit("Geri yükleme başarısız oldu.")
         except Exception as e:
