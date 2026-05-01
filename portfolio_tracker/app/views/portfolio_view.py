@@ -205,7 +205,7 @@ class PortfolioView(QWidget):
         asset_id_str = self.table_model.data(self.table_model.index(index.row(), 0), Qt.DisplayRole)
         try:
             asset_id = int(asset_id_str)
-        except:
+        except (ValueError, TypeError):
             return
             
         assets = self.view_model.cached_portfolio_data

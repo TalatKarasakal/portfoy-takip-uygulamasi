@@ -156,7 +156,7 @@ class ImportExportService:
                 elif "tutar" in c_lower or "maliyet" in c_lower:
                     try:
                         tutar = float(row[col])
-                    except:
+                    except ValueError:
                         pass
                         
             if not code or pd.isna(code) or code == 'NAN':
