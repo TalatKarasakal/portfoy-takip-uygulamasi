@@ -81,18 +81,29 @@ class ImportExportService:
 
     @staticmethod
     def _process_full_transaction_history(session: Session, df: pd.DataFrame) -> bool:
+        codes = []
+        for _, row in df.iterrows():
+            code = str(row.get("Kod", row.get("kod"))).strip().upper()
+            if not pd.isna(code) and code and code != 'NAN':
+                codes.append(code)
+
+        unique_codes = list(set(codes))
+        existing_assets = session.query(Asset).filter(Asset.code.in_(unique_codes)).all() if unique_codes else []
+        asset_dict = {a.code: a for a in existing_assets}
+
         for index, row in df.iterrows():
             code = str(row.get("Kod", row.get("kod"))).strip().upper()
-            if pd.isna(code) or not code:
+            if pd.isna(code) or not code or code == 'NAN':
                 continue
                 
-            asset = session.query(Asset).filter_by(code=code).first()
+            asset = asset_dict.get(code)
             if not asset:
                 # Otomatik varlık oluşturma (Türünü belirleme heuristic)
                 a_type = AssetType.BIST if len(code) == 5 else AssetType.TEFAS
                 asset = Asset(code=code, name=code, asset_type=a_type)
                 session.add(asset)
                 session.flush()
+                asset_dict[code] = asset
                 
             ttype_str = str(row.get("Tür", row.get("tür", ""))).strip().upper()
             ttype = TransactionType.BUY if ttype_str in ["BUY", "AL", "ALIM"] else TransactionType.SELL
@@ -113,17 +124,28 @@ class ImportExportService:
     @staticmethod
     def _process_quantity_cost(session: Session, df: pd.DataFrame) -> bool:
         """Adet ve Ortalama Maliyet verilirse, tek bir sanal BUY işlemi olarak eklenecek."""
+        codes = []
+        for _, row in df.iterrows():
+            code = str(row.get("Kod", row.get("kod"))).strip().upper()
+            if not pd.isna(code) and code and code != 'NAN':
+                codes.append(code)
+
+        unique_codes = list(set(codes))
+        existing_assets = session.query(Asset).filter(Asset.code.in_(unique_codes)).all() if unique_codes else []
+        asset_dict = {a.code: a for a in existing_assets}
+
         for index, row in df.iterrows():
             code = str(row.get("Kod", row.get("kod"))).strip().upper()
-            if pd.isna(code) or not code:
+            if pd.isna(code) or not code or code == 'NAN':
                 continue
                 
-            asset = session.query(Asset).filter_by(code=code).first()
+            asset = asset_dict.get(code)
             if not asset:
                 a_type = AssetType.BIST if len(code) == 5 else AssetType.TEFAS
                 asset = Asset(code=code, name=code, asset_type=a_type)
                 session.add(asset)
                 session.flush()
+                asset_dict[code] = asset
 
             tx = Transaction(
                 asset_id=asset.id,
@@ -142,6 +164,21 @@ class ImportExportService:
     @staticmethod
     def _process_assets_only(session: Session, df: pd.DataFrame) -> bool:
         """Sadece varlık listesi (Kod, Ad) ve isteğe bağlı Tutar ekler."""
+        codes = []
+        for _, row in df.iterrows():
+            code = None
+            for col in df.columns:
+                c_lower = str(col).lower()
+                if "kod" in c_lower:
+                    code = str(row[col]).strip().upper()
+                    break
+            if code and not pd.isna(code) and code != 'NAN':
+                codes.append(code)
+
+        unique_codes = list(set(codes))
+        existing_assets = session.query(Asset).filter(Asset.code.in_(unique_codes)).all() if unique_codes else []
+        asset_dict = {a.code: a for a in existing_assets}
+
         for index, row in df.iterrows():
             code = None
             name = None
@@ -165,13 +202,14 @@ class ImportExportService:
             if not name or pd.isna(name) or name == 'NAN':
                 name = code
                 
-            asset = session.query(Asset).filter_by(code=code).first()
+            asset = asset_dict.get(code)
             if not asset:
                 # BIST genellikle 5 hane (Örn: THYAO), Fonlar genelde 3 hane (Örn: AFT)
                 a_type = AssetType.BIST if len(code) >= 4 and len(code) <= 5 else AssetType.TEFAS
                 asset = Asset(code=code, name=name, asset_type=a_type)
                 session.add(asset)
                 session.flush() # ID'yi alabilmek için
+                asset_dict[code] = asset
                 
             # Eğer Tutar doldurulmuşsa bunu bir BUY işlemi olarak atalım (Miktar 1 birim)
             if tutar > 0 and not pd.isna(tutar):

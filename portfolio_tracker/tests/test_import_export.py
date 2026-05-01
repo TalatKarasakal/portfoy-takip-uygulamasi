@@ -4,6 +4,8 @@ import pandas as pd
 from unittest.mock import MagicMock
 from app.services.import_export_service import ImportExportService
 from app.models.asset import Asset, AssetType
+from app.models.price_history import PriceHistory
+from app.models.alert import Alert
 
 @pytest.fixture
 def mock_session():
