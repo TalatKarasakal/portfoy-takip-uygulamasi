@@ -66,6 +66,18 @@ QPushButton[objectName^="nav_btn_"]:checked {
     color: #111827;
 }
 
+.CardSubtitle {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 13px;
+    color: #6B7280;
+}
+
+#status_label {
+    color: #6B7280;
+    font-size: 12px;
+    padding: 6px;
+}
+
 .ProfitText {
     color: #059669; /* Zümrüt Yeşili - Okunabilir */
 }
@@ -100,8 +112,8 @@ QHeaderView::section {
     border-right: 1px solid #E5E7EB;
 }
 
-/* Form Elemanları (Inputs, Combos) */
-QLineEdit, QComboBox {
+/* Form Elemanları (Inputs, Combos, SpinBox, DateEdit) */
+QLineEdit, QComboBox, QDoubleSpinBox, QSpinBox, QDateEdit {
     border: 1px solid #D1D5DB;
     border-radius: 6px;
     padding: 8px 12px;
@@ -109,13 +121,20 @@ QLineEdit, QComboBox {
     color: #111827;
 }
 
-QLineEdit:focus, QComboBox:focus {
+QLineEdit:focus, QComboBox:focus, QDoubleSpinBox:focus, QSpinBox:focus, QDateEdit:focus {
     border: 1px solid #00B5E2; /* Turkuaz Vurgu */
     background-color: #FFFFFF;
 }
 
 QComboBox::drop-down {
     border: none;
+}
+
+QComboBox QAbstractItemView {
+    background-color: #FFFFFF;
+    color: #111827;
+    selection-background-color: #FEE2E2;
+    border: 1px solid #E5E7EB;
 }
 
 /* Butonlar */
@@ -130,6 +149,62 @@ QPushButton {
 
 QPushButton:hover {
     background-color: #E5E7EB;
+}
+
+/* Sekmeler */
+QTabWidget::pane {
+    border: 1px solid #E5E7EB;
+    border-radius: 8px;
+    top: -1px;
+}
+
+QTabBar::tab {
+    background: transparent;
+    color: #6B7280;
+    padding: 8px 18px;
+    border: none;
+    border-bottom: 2px solid transparent;
+}
+
+QTabBar::tab:selected {
+    color: #111827;
+    border-bottom: 2px solid #E30A17;
+}
+
+QTabBar::tab:hover {
+    color: #111827;
+}
+
+/* GroupBox */
+QGroupBox {
+    border: 1px solid #E5E7EB;
+    border-radius: 8px;
+    margin-top: 14px;
+    padding: 12px;
+    font-weight: 600;
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    left: 12px;
+    padding: 0 4px;
+    color: #6B7280;
+}
+
+/* Menü (sağ tık) */
+QMenu {
+    background-color: #FFFFFF;
+    border: 1px solid #E5E7EB;
+    color: #111827;
+}
+
+QMenu::item:selected {
+    background-color: #FEE2E2;
+}
+
+QCheckBox {
+    color: #111827;
+    spacing: 6px;
 }
 
 /* QDialog Pencereleri */
