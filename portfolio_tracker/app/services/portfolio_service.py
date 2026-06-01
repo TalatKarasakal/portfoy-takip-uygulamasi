@@ -1,9 +1,14 @@
 import datetime
+import math
 from typing import List, Dict, Any, Tuple
 from collections import deque
 from app.models.transaction import Transaction, TransactionType
 from app.models.asset import Asset
 from app.utils.logger import app_logger
+
+# Yıllıklaştırma için varsayılan işlem günü sayısı
+TRADING_DAYS_PER_YEAR = 252
+
 
 class PortfolioService:
     @staticmethod
@@ -106,6 +111,53 @@ class PortfolioService:
             "unrealized_pnl": unrealized_pnl,
             "total_cost": remaining_quantity * average_cost
         }
+
+    @staticmethod
+    def calculate_risk_metrics(values: List[float]) -> Dict[str, float]:
+        """Portföy değer serisinden Sharpe oranı, volatilite ve max düşüş hesaplar.
+
+        Snapshot'lar her gün alınmayabileceği için getiriler yaklaşık "günlük"
+        kabul edilip 252 işlem günüyle yıllıklaştırılır. Risksiz getiri 0 alınır.
+
+        Args:
+            values: Tarih sırasına göre portföy toplam değerleri.
+
+        Returns:
+            {"sharpe": float, "volatility": float, "max_drawdown": float}
+            max_drawdown negatif bir orandır (örn. -0.15 => %15 düşüş).
+        """
+        empty = {"sharpe": 0.0, "volatility": 0.0, "max_drawdown": 0.0}
+        if not values or len(values) < 2:
+            return empty
+
+        # Günlük getiriler
+        returns = []
+        for prev, cur in zip(values[:-1], values[1:]):
+            if prev > 0:
+                returns.append(cur / prev - 1.0)
+        if len(returns) < 2:
+            return empty
+
+        n = len(returns)
+        mean_r = sum(returns) / n
+        variance = sum((r - mean_r) ** 2 for r in returns) / (n - 1)
+        std_r = math.sqrt(variance)
+
+        volatility = std_r * math.sqrt(TRADING_DAYS_PER_YEAR)
+        sharpe = (mean_r / std_r) * math.sqrt(TRADING_DAYS_PER_YEAR) if std_r > 0 else 0.0
+
+        # Maksimum düşüş (peak-to-trough)
+        peak = values[0]
+        max_dd = 0.0
+        for v in values:
+            if v > peak:
+                peak = v
+            if peak > 0:
+                dd = (v - peak) / peak
+                if dd < max_dd:
+                    max_dd = dd
+
+        return {"sharpe": sharpe, "volatility": volatility, "max_drawdown": max_dd}
 
     @staticmethod
     def calculate_xirr(cash_flows: List[Tuple[datetime.date, float]]) -> float:
