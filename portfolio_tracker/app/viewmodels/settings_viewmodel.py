@@ -1,17 +1,24 @@
 from PySide6.QtCore import QObject, Signal
 from app.database.session import get_session
 from app.models.settings import Settings
+from app.models.asset import Asset
+from app.models.transaction import Transaction
+from app.models.alert import Alert
+from app.models.price_history import PriceHistory
+from app.models.portfolio_snapshot import PortfolioSnapshot
 from app.services.import_export_service import ImportExportService
 from app.services.backup_service import BackupService
+from app.utils.logger import app_logger
 
 class SettingsViewModel(QObject):
     settings_loaded = Signal(dict)
     settings_saved = Signal()
     error_occurred = Signal(str)
     success_message = Signal(str)
+    data_wiped = Signal()
 
     default_settings = {
-        "theme": "dark",
+        "theme": "system",
         "default_currency": "TRY",
         "refresh_interval_minutes": "15",
         "cost_method": "WAC",
@@ -81,3 +88,22 @@ class SettingsViewModel(QObject):
                 self.error_occurred.emit("Geri yükleme başarısız oldu.")
         except Exception as e:
             self.error_occurred.emit(f"Geri yükleme hatası: {str(e)}")
+
+    def delete_all_data(self):
+        """Tüm portföy verisini siler. Güvenlik için önce otomatik yedek alınır."""
+        try:
+            # Silmeden önce güvenlik yedeği
+            BackupService.create_backup()
+            with get_session() as session:
+                # Sıra önemli değil (cascade var) ama açıkça temizleyelim
+                session.query(Alert).delete()
+                session.query(Transaction).delete()
+                session.query(PriceHistory).delete()
+                session.query(PortfolioSnapshot).delete()
+                session.query(Asset).delete()
+                session.commit()
+            self.success_message.emit("Tüm veri silindi. (Silmeden önce otomatik yedek alındı.)")
+            self.data_wiped.emit()
+        except Exception as e:
+            app_logger.error(f"Veri silme hatası: {e}")
+            self.error_occurred.emit(f"Veri silme hatası: {str(e)}")

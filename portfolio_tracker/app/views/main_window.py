@@ -95,6 +95,7 @@ class MainWindow(QMainWindow):
 
         self.settings_vm.settings_loaded.connect(self.apply_theme)
         self.settings_vm.settings_loaded.connect(self.on_settings_for_runtime)
+        self.settings_vm.data_wiped.connect(lambda: self.portfolio_vm.load_data())
         self.alerts_vm.alert_triggered.connect(self._on_alert_triggered)
 
         self.views = {
