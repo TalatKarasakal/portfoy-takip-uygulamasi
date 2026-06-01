@@ -224,6 +224,20 @@ class PortfolioViewModel(QObject):
             app_logger.error(f"Error adding asset: {e}")
             self.error_occurred.emit(str(e))
 
+    def update_asset(self, asset_id: int, name: str, a_type: str):
+        """Varlığın adını ve türünü günceller."""
+        try:
+            with get_session() as session:
+                asset = session.query(Asset).filter_by(id=asset_id).first()
+                if asset:
+                    asset.name = name
+                    asset.asset_type = AssetType.BIST if a_type == "BIST" else AssetType.TEFAS
+                    session.commit()
+            self.load_data()
+        except Exception as e:
+            app_logger.error(f"Error updating asset: {e}")
+            self.error_occurred.emit(str(e))
+
     def delete_asset(self, asset_id: int):
         """Varlığı ve ona bağlı tüm işlem/uyarı/fiyat kayıtlarını siler."""
         try:
