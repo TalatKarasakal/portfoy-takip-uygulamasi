@@ -20,6 +20,14 @@ def main():
     app.setApplicationName("Portföy Takip ve Analiz")
     app.setOrganizationName("PortfolioTracker")
 
+    # Gömülü fontları yükle (Inter + JetBrains Mono)
+    try:
+        from app.utils.fonts import load_fonts, apply_default_font
+        load_fonts()
+        apply_default_font(app, "Inter", 10)
+    except Exception as e:
+        app_logger.error(f"Font yükleme atlandı: {e}")
+
     # Varsayılan temel stili uygula (tema QSS'i üzerine binecek)
     app.setStyle("Fusion")
 

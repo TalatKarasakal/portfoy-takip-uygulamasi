@@ -23,7 +23,6 @@ class SettingsViewModel(QObject):
         "refresh_interval_minutes": "15",
         "cost_method": "WAC",
         "notifications_enabled": "1",
-        "language": "tr"
     }
 
     def load_settings(self):

@@ -45,10 +45,6 @@ class SettingsView(QWidget):
         self.cost_method_combo.addItems(["WAC", "FIFO", "LIFO"])
         form_basic.addRow("Maliyet Metodu:", self.cost_method_combo)
 
-        self.language_combo = QComboBox()
-        self.language_combo.addItems(["tr", "en"])
-        form_basic.addRow("Dil:", self.language_combo)
-
         self.notifications_check = QCheckBox("Uyarı bildirimleri açık")
         form_basic.addRow("Bildirimler:", self.notifications_check)
 
@@ -112,7 +108,6 @@ class SettingsView(QWidget):
         self.currency_combo.setCurrentText(settings.get("default_currency", "TRY"))
         self.refresh_combo.setCurrentText(settings.get("refresh_interval_minutes", "15"))
         self.cost_method_combo.setCurrentText(settings.get("cost_method", "WAC"))
-        self.language_combo.setCurrentText(settings.get("language", "tr"))
         self.notifications_check.setChecked(
             str(settings.get("notifications_enabled", "1")) in ("1", "True", "true")
         )
@@ -123,7 +118,6 @@ class SettingsView(QWidget):
             "default_currency": self.currency_combo.currentText(),
             "refresh_interval_minutes": self.refresh_combo.currentText(),
             "cost_method": self.cost_method_combo.currentText(),
-            "language": self.language_combo.currentText(),
             "notifications_enabled": "1" if self.notifications_check.isChecked() else "0",
         }
         self.view_model.save_settings(new_s)
