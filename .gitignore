@@ -6,10 +6,10 @@ venv/
 env/
 .env
 
-# Database & Personal Data
-data/*.db
-data/backups/
-logs/*.log
+# Database & Personal Data (proje alt klasörde olduğu için ** ile eşleştir)
+**/data/*.db
+**/data/backups/
+**/logs/*.log
 
 # Packaging
 dist/
