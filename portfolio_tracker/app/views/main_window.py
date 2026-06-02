@@ -96,6 +96,13 @@ class MainWindow(QMainWindow):
         self.settings_vm.data_wiped.connect(lambda: self.portfolio_vm.load_data())
         self.alerts_vm.alert_triggered.connect(self._on_alert_triggered)
 
+        # Otomatik yenileme zamanlayıcısı (view'lar kurulmadan önce hazır olmalı;
+        # ayar sinyalleri erken tetiklenirse hata vermesin)
+        self.refresh_timer = QTimer(self)
+        self.refresh_timer.timeout.connect(lambda: self.portfolio_vm.load_data())
+
+        # view sözlüğü erken referanslara karşı önce boş başlatılır
+        self.views = {}
         self.views = {
             "dashboard": DashboardView(self.portfolio_vm),
             "portfolio": PortfolioView(self.portfolio_vm),
@@ -114,10 +121,6 @@ class MainWindow(QMainWindow):
         self.portfolio_vm.data_loaded.connect(lambda _: self.transaction_vm.load_transactions())
         self.portfolio_vm.loading_started.connect(lambda: self.status_label.setText("⟳ Yenileniyor..."))
         self.portfolio_vm.loading_finished.connect(lambda: self.status_label.setText(""))
-
-        # Otomatik yenileme zamanlayıcısı
-        self.refresh_timer = QTimer(self)
-        self.refresh_timer.timeout.connect(lambda: self.portfolio_vm.load_data())
 
         # Varsayılan sekme
         self.switch_tab("dashboard")
@@ -153,7 +156,7 @@ class MainWindow(QMainWindow):
                 QApplication.instance().setStyleSheet(f.read())
 
         # Grafik içeren view'lara tema rengini bildir
-        for view in self.views.values():
+        for view in getattr(self, "views", {}).values():
             if hasattr(view, "apply_chart_theme"):
                 view.apply_chart_theme(theme)
 

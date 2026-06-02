@@ -104,7 +104,8 @@ class SettingsView(QWidget):
         self.view_model.settings_loaded.connect(self.on_settings_loaded)
         self.view_model.success_message.connect(self.on_success)
         self.view_model.error_occurred.connect(self.on_error)
-        self.view_model.load_settings()
+        # Not: load_settings() MainWindow tarafından kurulum tamamlandıktan sonra
+        # çağrılır; burada çağırmak view'lar/timer hazır olmadan sinyal tetikler.
 
     def on_settings_loaded(self, settings: dict):
         self.theme_combo.setCurrentText(settings.get("theme", "system"))
