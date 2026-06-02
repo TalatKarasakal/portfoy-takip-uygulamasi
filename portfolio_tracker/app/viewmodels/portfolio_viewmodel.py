@@ -305,9 +305,11 @@ class PortfolioViewModel(QObject):
                 for tx in txs:
                     gross = float(tx.quantity) * float(tx.unit_price)
                     fees = float(tx.commission) + float(tx.tax)
-                    # Alımda masraflar toplam maliyeti artırır; satımda net geliri düşürür.
+                    # Alımda masraflar toplam maliyeti artırır; satım/temettüde net geliri düşürür.
                     if tx.transaction_type == TransactionType.BUY:
                         total = gross + fees
+                    elif tx.transaction_type == TransactionType.SPLIT:
+                        total = 0.0
                     else:
                         total = gross - fees
                     result.append({

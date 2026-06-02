@@ -7,6 +7,8 @@ from app.database.base import Base
 class TransactionType(enum.Enum):
     BUY = "BUY"
     SELL = "SELL"
+    DIVIDEND = "DIVIDEND"  # Temettü: nakit girişi, adet değişmez
+    SPLIT = "SPLIT"        # Bedelsiz/bölünme: adet katsayıyla çarpılır, maliyet bölünür
 
 class Transaction(Base):
     __tablename__ = "transactions"

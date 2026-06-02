@@ -35,47 +35,57 @@ class PortfolioService:
         if method == "WAC":
             # Weighted Average Cost
             total_invested = 0.0
-            
+
             for tx in txs:
                 qty = float(tx.quantity)
-                cost = float(tx.unit_price) * qty + float(tx.commission) + float(tx.tax)
-                
-                if tx.transaction_type == TransactionType.BUY:
+                ttype = tx.transaction_type
+
+                if ttype == TransactionType.BUY:
+                    cost = float(tx.unit_price) * qty + float(tx.commission) + float(tx.tax)
                     total_invested += cost
                     remaining_quantity += qty
-                elif tx.transaction_type == TransactionType.SELL:
+                elif ttype == TransactionType.SELL:
                     if remaining_quantity > 0:
                         avg_cost_per_unit = total_invested / remaining_quantity
                         # Satış karı = (Satış geliri net) - (Satılan adet * ortalama maliyet)
                         net_revenue = (float(tx.unit_price) * qty) - (float(tx.commission) + float(tx.tax))
                         cost_of_sold = avg_cost_per_unit * qty
-                        
+
                         realized_pnl += (net_revenue - cost_of_sold)
                         total_invested -= cost_of_sold
                         remaining_quantity -= qty
-            
+                elif ttype == TransactionType.DIVIDEND:
+                    # Temettü: net nakit girişi (adet*birim - komisyon - stopaj)
+                    realized_pnl += (float(tx.unit_price) * qty) - float(tx.commission) - float(tx.tax)
+                elif ttype == TransactionType.SPLIT:
+                    # Bedelsiz/bölünme: birim_fiyat = katsayı (örn. 2.0 => adet 2 katına)
+                    ratio = float(tx.unit_price)
+                    if ratio > 0 and remaining_quantity > 0:
+                        remaining_quantity *= ratio  # toplam maliyet sabit kalır
+
             average_cost = (total_invested / remaining_quantity) if remaining_quantity > 0 else 0.0
-            
+
         elif method in ("FIFO", "LIFO"):
             # Queue for FIFO, Stack for LIFO
             inventory = deque() if method == "FIFO" else []
-            
+
             for tx in txs:
                 qty = float(tx.quantity)
-                
-                if tx.transaction_type == TransactionType.BUY:
+                ttype = tx.transaction_type
+
+                if ttype == TransactionType.BUY:
                     # Birim başına tam maliyet
                     unit_full_cost = (float(tx.unit_price) * qty + float(tx.commission) + float(tx.tax)) / qty
                     inventory.append({"qty": qty, "unit_cost": unit_full_cost})
                     remaining_quantity += qty
-                elif tx.transaction_type == TransactionType.SELL:
+                elif ttype == TransactionType.SELL:
                     qty_to_sell = qty
                     net_revenue = (float(tx.unit_price) * qty) - (float(tx.commission) + float(tx.tax))
                     total_cost_of_sold = 0.0
-                    
+
                     while qty_to_sell > 0 and inventory:
                         batch = inventory[0] if method == "FIFO" else inventory[-1]
-                        
+
                         if batch["qty"] <= qty_to_sell:
                             total_cost_of_sold += batch["qty"] * batch["unit_cost"]
                             qty_to_sell -= batch["qty"]
@@ -87,10 +97,19 @@ class PortfolioService:
                             total_cost_of_sold += qty_to_sell * batch["unit_cost"]
                             batch["qty"] -= qty_to_sell
                             qty_to_sell = 0
-                    
+
                     realized_pnl += (net_revenue - total_cost_of_sold)
                     remaining_quantity -= qty
-            
+                elif ttype == TransactionType.DIVIDEND:
+                    realized_pnl += (float(tx.unit_price) * qty) - float(tx.commission) - float(tx.tax)
+                elif ttype == TransactionType.SPLIT:
+                    ratio = float(tx.unit_price)
+                    if ratio > 0:
+                        for item in inventory:
+                            item["qty"] *= ratio
+                            item["unit_cost"] /= ratio
+                        remaining_quantity *= ratio
+
             # Kalan envanterin ortalama maliyeti hesabı
             if remaining_quantity > 0:
                 total_remaining_cost = sum(item["qty"] * item["unit_cost"] for item in inventory)

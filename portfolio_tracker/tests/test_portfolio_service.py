@@ -8,15 +8,15 @@ class MockAsset:
     def __init__(self, id):
         self.id = id
 
-def build_tx(tx_type, qty, price, date_str):
+def build_tx(tx_type, qty, price, date_str, commission=0, tax=0):
     tx = Transaction(
         asset_id=1,
         transaction_type=tx_type,
         date=datetime.datetime.strptime(date_str, "%Y-%m-%d").date(),
         quantity=Decimal(str(qty)),
         unit_price=Decimal(str(price)),
-        commission=Decimal("0"),
-        tax=Decimal("0")
+        commission=Decimal(str(commission)),
+        tax=Decimal(str(tax))
     )
     return tx
 
@@ -118,3 +118,42 @@ def test_risk_metrics_no_drawdown_when_monotonic():
     res = PortfolioService.calculate_risk_metrics([100, 101, 102, 103])
     assert res["max_drawdown"] == 0.0
     assert res["sharpe"] > 0  # sürekli artış pozitif Sharpe verir
+
+
+def test_dividend_adds_to_realized_pnl():
+    # 10 hisse al; sonra 10 hisseye hisse başı 2 TL temettü (toplam 20), 3 TL stopaj
+    txs = [
+        build_tx(TransactionType.BUY, 10, 100, "2023-01-01"),
+        build_tx(TransactionType.DIVIDEND, 10, 2, "2023-03-01", tax=3),
+    ]
+    res = PortfolioService.calculate_cost_and_pnl(txs, current_price=110, method="WAC")
+    # Temettü adedi/maliyeti değiştirmez
+    assert res["remaining_quantity"] == 10
+    assert abs(res["average_cost"] - 100) < 1e-6
+    # net temettü = 20 - 3 = 17
+    assert abs(res["realized_pnl"] - 17) < 1e-6
+    assert abs(res["unrealized_pnl"] - 100) < 1e-6  # (110-100)*10
+
+
+def test_split_doubles_quantity_halves_cost_wac():
+    # 10 hisse @100 (toplam maliyet 1000), 1:1 bedelsiz => katsayı 2.0
+    txs = [
+        build_tx(TransactionType.BUY, 10, 100, "2023-01-01"),
+        build_tx(TransactionType.SPLIT, 0, 2.0, "2023-02-01"),
+    ]
+    res = PortfolioService.calculate_cost_and_pnl(txs, current_price=60, method="WAC")
+    assert abs(res["remaining_quantity"] - 20) < 1e-6
+    assert abs(res["average_cost"] - 50) < 1e-6        # 1000/20
+    assert abs(res["total_cost"] - 1000) < 1e-6        # toplam maliyet sabit
+    assert abs(res["unrealized_pnl"] - 200) < 1e-6     # (60-50)*20
+
+
+def test_split_fifo():
+    txs = [
+        build_tx(TransactionType.BUY, 10, 100, "2023-01-01"),
+        build_tx(TransactionType.SPLIT, 0, 2.0, "2023-02-01"),
+    ]
+    res = PortfolioService.calculate_cost_and_pnl(txs, current_price=60, method="FIFO")
+    assert abs(res["remaining_quantity"] - 20) < 1e-6
+    assert abs(res["average_cost"] - 50) < 1e-6
+    assert abs(res["unrealized_pnl"] - 200) < 1e-6

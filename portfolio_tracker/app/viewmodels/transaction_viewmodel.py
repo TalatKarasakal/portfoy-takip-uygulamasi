@@ -24,7 +24,12 @@ class TransactionViewModel(QObject):
                 for tx in txs:
                     gross = float(tx.quantity) * float(tx.unit_price)
                     fees = float(tx.commission) + float(tx.tax)
-                    total = gross + fees if tx.transaction_type == TransactionType.BUY else gross - fees
+                    if tx.transaction_type == TransactionType.BUY:
+                        total = gross + fees
+                    elif tx.transaction_type == TransactionType.SPLIT:
+                        total = 0.0  # nakit akışı yok
+                    else:  # SELL, DIVIDEND => net nakit girişi
+                        total = gross - fees
                     result.append({
                         "id": tx.id,
                         "asset_id": tx.asset_id,

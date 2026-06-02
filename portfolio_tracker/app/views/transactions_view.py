@@ -8,6 +8,11 @@ from app.views.widgets.table_filter import TableFilterProxyModel
 
 BUY_COLOR = QColor("#00B5E2")
 SELL_COLOR = QColor("#A855F7")
+DIVIDEND_COLOR = QColor("#10B981")
+SPLIT_COLOR = QColor("#9CA3AF")
+
+TYPE_LABELS = {"BUY": "Alım", "SELL": "Satım", "DIVIDEND": "Temettü", "SPLIT": "Bölünme"}
+TYPE_COLORS = {"BUY": BUY_COLOR, "SELL": SELL_COLOR, "DIVIDEND": DIVIDEND_COLOR, "SPLIT": SPLIT_COLOR}
 
 
 class TransactionTableModel(QAbstractTableModel):
@@ -28,7 +33,7 @@ class TransactionTableModel(QAbstractTableModel):
         if role == Qt.DisplayRole:
             if col == self.COL_DATE: return row.get("date", "")
             elif col == self.COL_ASSET: return row.get("asset_code", "")
-            elif col == self.COL_TYPE: return "Alım" if row.get("type") == "BUY" else "Satım"
+            elif col == self.COL_TYPE: return TYPE_LABELS.get(row.get("type"), row.get("type", ""))
             elif col == self.COL_QTY: return f"{row.get('quantity', 0):,.2f}"
             elif col == self.COL_PRICE: return format_currency(row.get("unit_price", 0))
             elif col == self.COL_COMM: return format_currency(row.get("commission", 0))
@@ -49,7 +54,7 @@ class TransactionTableModel(QAbstractTableModel):
 
         elif role == Qt.ForegroundRole:
             if col == self.COL_TYPE:
-                return BUY_COLOR if row.get("type") == "BUY" else SELL_COLOR
+                return TYPE_COLORS.get(row.get("type"), BUY_COLOR)
 
         elif role == Qt.TextAlignmentRole:
             if col in (self.COL_QTY, self.COL_PRICE, self.COL_COMM, self.COL_TAX, self.COL_TOTAL):
@@ -95,6 +100,8 @@ class AddTransactionDialog(QDialog):
         self.combo_type = QComboBox()
         self.combo_type.addItem("Alım", "BUY")
         self.combo_type.addItem("Satım", "SELL")
+        self.combo_type.addItem("Temettü", "DIVIDEND")
+        self.combo_type.addItem("Bölünme / Bedelsiz", "SPLIT")
 
         self.date_edit = QDateEdit()
         self.date_edit.setCalendarPopup(True)
@@ -118,21 +125,32 @@ class AddTransactionDialog(QDialog):
 
         self.line_note = QLineEdit()
 
+        self.lbl_qty = QLabel("Adet:")
+        self.lbl_price = QLabel("Birim Fiyat:")
         form.addRow("Varlık:", self.combo_asset)
         form.addRow("Tür:", self.combo_type)
         form.addRow("Tarih:", self.date_edit)
-        form.addRow("Adet:", self.spin_qty)
-        form.addRow("Birim Fiyat:", self.spin_price)
+        form.addRow(self.lbl_qty, self.spin_qty)
+        form.addRow(self.lbl_price, self.spin_price)
         form.addRow("Komisyon:", self.spin_commission)
-        form.addRow("Vergi:", self.spin_tax)
+        form.addRow("Vergi/Stopaj:", self.spin_tax)
         form.addRow("Not:", self.line_note)
         layout.addLayout(form)
+
+        self.hint = QLabel("")
+        self.hint.setWordWrap(True)
+        self.hint.setProperty("class", "CardTitle")
+        layout.addWidget(self.hint)
+        self.combo_type.currentIndexChanged.connect(self._update_hint)
+        self._update_hint()
 
         if tx:
             ai = self.combo_asset.findData(tx.get("asset_id"))
             if ai >= 0:
                 self.combo_asset.setCurrentIndex(ai)
-            self.combo_type.setCurrentIndex(0 if tx.get("type") == "BUY" else 1)
+            ti = self.combo_type.findData(tx.get("type"))
+            if ti >= 0:
+                self.combo_type.setCurrentIndex(ti)
             d = tx.get("date_obj")
             if d is not None:
                 self.date_edit.setDate(QDate(d.year, d.month, d.day))
@@ -151,6 +169,27 @@ class AddTransactionDialog(QDialog):
         btn_layout.addWidget(self.btn_cancel)
         btn_layout.addWidget(self.btn_save)
         layout.addLayout(btn_layout)
+
+    def _update_hint(self):
+        t = self.combo_type.currentData()
+        hints = {
+            "BUY": "Alım: Adet ve birim fiyat girin. Komisyon toplam maliyeti artırır.",
+            "SELL": "Satım: Adet ve birim fiyat. Komisyon + vergi net geliri düşürür.",
+            "DIVIDEND": "Temettü: 'Adet' = hisse sayısı, 'Birim Fiyat' = hisse başı temettü "
+                        "(toplam = adet × fiyat). Stopajı Vergi/Stopaj alanına yazın.",
+            "SPLIT": "Bölünme/Bedelsiz: 'Katsayı' = adetin çarpanı (örn. 2.0 ⇒ adet iki "
+                     "katına, maliyet yarıya iner). Adet alanı kullanılmaz.",
+        }
+        self.hint.setText(hints.get(t, ""))
+        if t == "SPLIT":
+            self.lbl_qty.setText("Adet (kullanılmaz):")
+            self.lbl_price.setText("Katsayı:")
+        elif t == "DIVIDEND":
+            self.lbl_qty.setText("Adet (hisse):")
+            self.lbl_price.setText("Hisse Başı Temettü:")
+        else:
+            self.lbl_qty.setText("Adet:")
+            self.lbl_price.setText("Birim Fiyat:")
 
     def get_data(self):
         return {
