@@ -219,8 +219,16 @@ class PortfolioView(QWidget):
         self.footer_label.setProperty("class", "CardTitle")
         layout.addWidget(self.footer_label)
 
+        # Güncellenemeyen / bayat fiyat uyarısı
+        self.warning_label = QLabel("")
+        self.warning_label.setWordWrap(True)
+        self.warning_label.setStyleSheet("color: #F59E0B;")
+        self.warning_label.setVisible(False)
+        layout.addWidget(self.warning_label)
+
         # Bağlantılar
         self.view_model.data_loaded.connect(self.on_data_loaded)
+        self.view_model.kpi_updated.connect(self.on_kpi_updated)
         self.view_model.error_occurred.connect(
             lambda msg: QMessageBox.warning(self, "Hata", msg)
         )
@@ -239,6 +247,17 @@ class PortfolioView(QWidget):
             f"Toplam Kayıt: {len(portfolio_items)}   |   "
             f"Toplam Değer: {format_currency(total_value)}"
         )
+
+    def on_kpi_updated(self, kpi_data):
+        stale = kpi_data.get("stale_codes", [])
+        failed = kpi_data.get("failed_codes", [])
+        parts = []
+        if stale:
+            parts.append(f"⚠ Son bilinen fiyat kullanılıyor: {', '.join(stale)}")
+        if failed:
+            parts.append(f"⛔ Fiyatı alınamadı: {', '.join(failed)}")
+        self.warning_label.setText("   ".join(parts))
+        self.warning_label.setVisible(bool(parts))
 
     def _selected_source_row(self, proxy_index):
         if not proxy_index.isValid():

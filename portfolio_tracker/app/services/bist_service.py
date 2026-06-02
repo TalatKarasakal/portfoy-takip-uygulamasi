@@ -1,8 +1,10 @@
+import datetime as _dt
 import yfinance as yf
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
 from app.utils.logger import prices_logger
 from app.utils.cache import price_cache
+from app.services.isyatirim_service import IsYatirimService
 
 
 class BistService:
@@ -29,6 +31,7 @@ class BistService:
             if cached is not None:
                 return cached
 
+        quote = {"price": None, "prev_close": None}
         try:
             prices_logger.debug(f"Fetching yfinance quote for {symbol}")
             ticker = yf.Ticker(symbol)
@@ -36,17 +39,20 @@ class BistService:
             history = ticker.history(period="5d")
             if history is not None and not history.empty:
                 closes = [float(c) for c in history["Close"].tolist()]
-                price = closes[-1]
-                prev_close = closes[-2] if len(closes) >= 2 else price
-                quote = {"price": price, "prev_close": prev_close}
-                price_cache.set(cache_key, quote)
-                return quote
-            prices_logger.warning(f"No BIST data returned for {symbol}")
-            return {"price": None, "prev_close": None}
+                quote = {"price": closes[-1], "prev_close": closes[-2] if len(closes) >= 2 else closes[-1]}
         except Exception as e:
-            prices_logger.error(f"Error fetching BIST {symbol}: {e}")
-            # TODO: Yedek kaynak olarak isyatirim.com.tr HTML scraping implemente edilebilir.
-            return {"price": None, "prev_close": None}
+            prices_logger.error(f"Error fetching BIST {symbol} (yfinance): {e}")
+
+        # yfinance başarısızsa İş Yatırım'a düş
+        if quote.get("price") is None:
+            prices_logger.debug(f"yfinance boş; İş Yatırım'a düşülüyor: {symbol}")
+            quote = IsYatirimService.fetch_quote(symbol)
+
+        if quote.get("price") is not None:
+            price_cache.set(cache_key, quote)
+        else:
+            prices_logger.warning(f"No BIST data returned for {symbol} (yfinance + İş Yatırım)")
+        return quote
 
     def fetch_current_price(self, symbol: str, force_refresh: bool = False) -> Optional[float]:
         """BIST hisse senedinin anlık fiyatını (ya da son kapanış fiyatını) çeker."""
@@ -67,8 +73,18 @@ class BistService:
                         "date": index.date(),
                         "close_price": float(row["Close"])
                     })
-                return records
-            return []
+                if records:
+                    return records
         except Exception as e:
-            prices_logger.error(f"Historical fetching error for BIST {symbol}: {e}")
-            return []
+            prices_logger.error(f"Historical fetching error for BIST {symbol} (yfinance): {e}")
+
+        # yfinance boş döndüyse İş Yatırım'a düş
+        days = self._period_to_days(period)
+        end = _dt.date.today()
+        start = end - _dt.timedelta(days=days)
+        return IsYatirimService.fetch_historical_prices(symbol, start, end)
+
+    @staticmethod
+    def _period_to_days(period: str) -> int:
+        mapping = {"1mo": 31, "3mo": 93, "6mo": 186, "1y": 366, "2y": 732, "ytd": 366, "5d": 7}
+        return mapping.get(period, 366)

@@ -7,6 +7,7 @@ from app.services.tefas_service import TefasService
 from app.services.currency_service import CurrencyService
 from app.services.portfolio_service import PortfolioService
 from app.services.snapshot_service import SnapshotService
+from app.services.price_history_service import PriceHistoryService
 from app.utils.logger import app_logger
 
 
@@ -35,6 +36,7 @@ class PortfolioLoaderThread(QThread):
                 daily_change_total = 0.0
                 prev_value_total = 0.0
                 failed_codes = []
+                stale_codes = []
 
                 for asset in assets:
                     if asset.asset_type == AssetType.BIST:
@@ -47,6 +49,18 @@ class PortfolioLoaderThread(QThread):
                     if prev_close is None:
                         prev_close = current_price
 
+                    is_stale = False
+                    if current_price > 0:
+                        # Güncel fiyatı ileride yedek olarak kullanmak üzere sakla
+                        PriceHistoryService.record_close(session, asset.id, current_price)
+                    else:
+                        # Her iki kaynak da başarısız: son bilinen fiyata düş
+                        last = PriceHistoryService.last_close(session, asset.id)
+                        if last:
+                            current_price = last
+                            prev_close = last  # değişim hesaplanamaz
+                            is_stale = True
+
                     txs = asset.transactions
                     stats = PortfolioService.calculate_cost_and_pnl(txs, current_price, method=self.cost_method)
 
@@ -55,10 +69,11 @@ class PortfolioLoaderThread(QThread):
                     # pozisyonların kazancı kaybolurdu).
                     realized_pnl_total += stats["realized_pnl"]
 
-                    if txs and current_price <= 0:
-                        # Fiyat çekilemeyen ama pozisyonu olan varlık.
-                        if stats["remaining_quantity"] > 0:
+                    if stats["remaining_quantity"] > 0:
+                        if current_price <= 0:
                             failed_codes.append(asset.code)
+                        elif is_stale:
+                            stale_codes.append(asset.code)
 
                     if stats["remaining_quantity"] > 0:
                         qty = stats["remaining_quantity"]
@@ -143,6 +158,7 @@ class PortfolioLoaderThread(QThread):
                     "best": {"code": best["code"], "pnl_pct": best["pnl_pct"]} if best else None,
                     "worst": {"code": worst["code"], "pnl_pct": worst["pnl_pct"]} if worst else None,
                     "failed_codes": failed_codes,
+                    "stale_codes": stale_codes,
                     "history": history,
                     "portfolio_items": portfolio_items,
                 }
