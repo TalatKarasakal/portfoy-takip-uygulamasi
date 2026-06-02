@@ -19,6 +19,15 @@ QMessageBox.warning = staticmethod(lambda *a, **k: QMessageBox.Ok)
 QMessageBox.information = staticmethod(lambda *a, **k: QMessageBox.Ok)
 QMessageBox.question = staticmethod(lambda *a, **k: QMessageBox.No)
 
+# Benchmark ağ çağrısını örnek veriyle değiştir
+import datetime as _dt
+from app.services.benchmark_service import BenchmarkService
+BenchmarkService.fetch_series = staticmethod(lambda *a, **k: {
+    "BIST 100": [(_dt.date(2024, 1, 1), 9000.0), (_dt.date(2024, 2, 1), 9500.0)],
+    "USD/TRY": [(_dt.date(2024, 1, 1), 32.0), (_dt.date(2024, 2, 1), 33.0)],
+    "Gram Altın": [(_dt.date(2024, 1, 1), 2000.0), (_dt.date(2024, 2, 1), 2100.0)],
+})
+
 from app.database.engine import init_db
 from app.views.main_window import MainWindow
 from app.views.portfolio_view import AssetDialog
@@ -100,6 +109,21 @@ def main():
          "type_label": "Fiyat şunun üstüne çıkarsa", "threshold": 320.0,
          "is_active": True, "triggered_at": None},
     ])
+    app.processEvents()
+
+    # Benchmark thread'inin tamamlanmasını bekle ve aralık butonlarını test et
+    av = win.views["analytics"]
+    if av._bench_loader is not None:
+        av._bench_loader.wait(3000)
+    app.processEvents()
+    for rng in ("1H", "1A", "3A", "6A", "YBB", "1Y", "Tümü"):
+        av._on_range_changed(rng)
+        app.processEvents()
+    # Benchmark serisi aç/kapa
+    for name, cb in av.series_checks.items():
+        cb.setChecked(False)
+        app.processEvents()
+        cb.setChecked(True)
     app.processEvents()
 
     # Temaları test et

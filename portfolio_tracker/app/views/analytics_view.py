@@ -1,15 +1,45 @@
+import datetime
 import time
+
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTabWidget,
-                                 QLabel, QPushButton, QButtonGroup)
-from PySide6.QtCore import Qt
+                                 QLabel, QPushButton, QButtonGroup, QCheckBox)
+from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtGui import QPainter, QColor
 from PySide6.QtCharts import QChart, QChartView, QPieSeries
 import pyqtgraph as pg
+
 from app.config import COLORS
-from app.utils.formatters import format_percent
+from app.services.benchmark_service import BenchmarkService
 
 PIE_PALETTE = ["#00B5E2", "#10B981", "#F59E0B", "#8B5CF6", "#EC4899", "#6B7280",
                "#EF4444", "#14B8A6", "#A855F7", "#F97316"]
+
+# Karşılaştırma serisi renkleri
+SERIES_COLORS = {
+    "Portföy": "#00B5E2",
+    "BIST 100": "#E30A17",
+    "USD/TRY": "#10B981",
+    "Gram Altın": "#F59E0B",
+}
+
+RANGE_DAYS = {"1H": 7, "1A": 30, "3A": 90, "6A": 180, "1Y": 365}
+
+
+class BenchmarkLoader(QThread):
+    loaded = Signal(dict)
+
+    def __init__(self, start, end):
+        super().__init__()
+        # Not: 'start' adını kullanma — QThread.start() metodunu gölgeler.
+        self._start = start
+        self._end = end
+
+    def run(self):
+        try:
+            series = BenchmarkService.fetch_series(self._start, self._end)
+        except Exception:
+            series = {}
+        self.loaded.emit(series)
 
 
 class AnalyticsView(QWidget):
@@ -18,6 +48,10 @@ class AnalyticsView(QWidget):
         self.analytics_vm = analytics_vm
         self.portfolio_vm = portfolio_vm
         self._theme = "dark"
+        self._range = "Tümü"
+        self._history = []
+        self._benchmark = {}
+        self._bench_loader = None
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 20, 20, 20)
@@ -26,18 +60,16 @@ class AnalyticsView(QWidget):
         self.tabs.addTab(self._create_performance_tab(), "Performans")
         self.tabs.addTab(self._create_allocation_tab(), "Dağılım")
         self.tabs.addTab(self._create_benchmark_tab(), "Karşılaştırma")
-
         layout.addWidget(self.tabs)
 
-        # Sinyaller
         self.analytics_vm.analytics_loaded.connect(self.on_analytics_loaded)
         self.apply_chart_theme(self._theme)
 
+    # ---------- Tab kurulumları ----------
     def _create_performance_tab(self):
         widget = QWidget()
         layout = QVBoxLayout(widget)
 
-        # Metrikler
         metrics_layout = QHBoxLayout()
         self.xirr_label = QLabel("XIRR: —")
         self.sharpe_label = QLabel("Sharpe: —")
@@ -48,19 +80,20 @@ class AnalyticsView(QWidget):
             metrics_layout.addWidget(lbl)
         layout.addLayout(metrics_layout)
 
-        # Filtre Butonları (görsel; veri seyrek olduğunda tüm geçmiş gösterilir)
         filter_layout = QHBoxLayout()
         self.range_group = QButtonGroup(self)
-        ranges = ["1H", "1A", "3A", "6A", "YBB", "1Y", "Tümü"]
-        for r in ranges:
+        self.range_group.setExclusive(True)
+        for r in ["1H", "1A", "3A", "6A", "YBB", "1Y", "Tümü"]:
             btn = QPushButton(r)
             btn.setCheckable(True)
+            if r == "Tümü":
+                btn.setChecked(True)
+            btn.clicked.connect(lambda _checked, rng=r: self._on_range_changed(rng))
             self.range_group.addButton(btn)
             filter_layout.addWidget(btn)
         filter_layout.addStretch()
         layout.addLayout(filter_layout)
 
-        # PyQtGraph — portföy değeri vs yatırılan maliyet
         self.plot_widget = pg.PlotWidget(
             axisItems={"bottom": pg.DateAxisItem(orientation="bottom")}
         )
@@ -68,14 +101,13 @@ class AnalyticsView(QWidget):
         self.plot_widget.showGrid(x=True, y=True, alpha=0.3)
         self.plot_widget.addLegend()
         self.empty_perf_label = QLabel(
-            "Henüz yeterli geçmiş veri yok. Uygulamayı birkaç gün kullandıkça "
-            "portföy değer geçmişi otomatik birikecek."
+            "Bu aralıkta yeterli geçmiş veri yok. Uygulamayı kullandıkça portföy "
+            "değer geçmişi otomatik birikecek."
         )
         self.empty_perf_label.setAlignment(Qt.AlignCenter)
         self.empty_perf_label.setWordWrap(True)
         layout.addWidget(self.empty_perf_label)
         layout.addWidget(self.plot_widget)
-
         return widget
 
     def _create_allocation_tab(self):
@@ -111,21 +143,38 @@ class AnalyticsView(QWidget):
     def _create_benchmark_tab(self):
         widget = QWidget()
         layout = QVBoxLayout(widget)
-        info = QLabel(
-            "Karşılaştırma: Portföy getirisi 100'e normalize edilerek gösterilir. "
-            "BIST 100 / TÜFE / USD / altın endeksleri bir sonraki sürümde eklenecektir."
-        )
+
+        info = QLabel("Tüm seriler seçili aralığın başında 100'e normalize edilir.")
         info.setWordWrap(True)
         layout.addWidget(info)
+
+        # Aç/kapa kutuları
+        toggles = QHBoxLayout()
+        self.series_checks = {}
+        for name in ("Portföy", "BIST 100", "USD/TRY", "Gram Altın"):
+            cb = QCheckBox(name)
+            cb.setChecked(True)
+            cb.stateChanged.connect(lambda _s: self._render_benchmark())
+            self.series_checks[name] = cb
+            toggles.addWidget(cb)
+        toggles.addStretch()
+        layout.addLayout(toggles)
+
+        self.benchmark_status = QLabel("")
+        self.benchmark_status.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self.benchmark_status)
+
         self.benchmark_plot = pg.PlotWidget(
-            title="Normalize Portföy Getirisi (Başlangıç = 100)",
+            title="Normalize Karşılaştırma (Başlangıç = 100)",
             axisItems={"bottom": pg.DateAxisItem(orientation="bottom")},
         )
         self.benchmark_plot.setBackground("transparent")
         self.benchmark_plot.showGrid(x=True, y=True, alpha=0.3)
+        self.benchmark_plot.addLegend()
         layout.addWidget(self.benchmark_plot)
         return widget
 
+    # ---------- Tema ----------
     def apply_chart_theme(self, theme: str):
         self._theme = theme
         palette = COLORS.get(theme, COLORS["dark"])
@@ -141,55 +190,128 @@ class AnalyticsView(QWidget):
                     ax.setPen(pg.mkPen(color=palette["text_secondary"]))
                     ax.setTextPen(pg.mkPen(color=palette["text_secondary"]))
 
+    # ---------- Veri ----------
     def on_analytics_loaded(self, data: dict):
-        xirr = data.get("xirr", 0) * 100
-        self.xirr_label.setText(f"XIRR (Yıllık): {xirr:.2f}%")
+        self.xirr_label.setText(f"XIRR (Yıllık): {data.get('xirr', 0) * 100:.2f}%")
         self.sharpe_label.setText(f"Sharpe: {data.get('sharpe', 0):.2f}")
         self.drawdown_label.setText(f"Max Düşüş: {data.get('max_drawdown', 0) * 100:.2f}%")
         self.volatility_label.setText(f"Volatilite: {data.get('volatility', 0) * 100:.2f}%")
 
-        # Tip Dağılımı
+        # Dağılım grafikleri
         self.type_donut_series.clear()
         alloc_type = data.get("allocation_type", {})
         if alloc_type.get("BIST", 0) > 0:
-            sl = self.type_donut_series.append("BIST", alloc_type["BIST"])
-            sl.setColor(QColor("#00B5E2"))
+            self.type_donut_series.append("BIST", alloc_type["BIST"]).setColor(QColor("#00B5E2"))
         if alloc_type.get("TEFAS", 0) > 0:
-            sl = self.type_donut_series.append("TEFAS", alloc_type["TEFAS"])
-            sl.setColor(QColor("#10B981"))
+            self.type_donut_series.append("TEFAS", alloc_type["TEFAS"]).setColor(QColor("#10B981"))
 
-        # Varlık Dağılımı
         self.asset_donut_series.clear()
-        alloc_asset = data.get("allocation_asset", [])
-        for i, item in enumerate(alloc_asset[:10]):
-            sl = self.asset_donut_series.append(item["name"], item["value"])
-            sl.setColor(QColor(PIE_PALETTE[i % len(PIE_PALETTE)]))
+        for i, item in enumerate(data.get("allocation_asset", [])[:10]):
+            self.asset_donut_series.append(item["name"], item["value"]).setColor(
+                QColor(PIE_PALETTE[i % len(PIE_PALETTE)])
+            )
 
-        # Performans grafiği: gerçek snapshot geçmişi
-        history = data.get("history", [])
+        # Geçmiş & yeniden çizim
+        self._history = data.get("history", [])
+        self._render_performance()
+
+        # Benchmark verisini bir kez (portföy aralığı, en az 1 yıl) arka planda çek;
+        # sonra bellekte tutulan veriyle yeniden çiz (her yenilemede yeni thread açma).
+        loader_busy = self._bench_loader is not None and self._bench_loader.isRunning()
+        if len(self._history) >= 2 and not self._benchmark and not loader_busy:
+            start = min(self._history[0]["date"], datetime.date.today() - datetime.timedelta(days=365))
+            end = datetime.date.today()
+            self._bench_loader = BenchmarkLoader(start, end)
+            self._bench_loader.loaded.connect(self._on_benchmark_loaded)
+            self._bench_loader.start()
+        else:
+            self._render_benchmark()
+
+    def _on_benchmark_loaded(self, series: dict):
+        self._benchmark = series or {}
+        self._render_benchmark()
+
+    # ---------- Aralık / filtreleme ----------
+    def _on_range_changed(self, rng: str):
+        self._range = rng
+        self._render_performance()
+        self._render_benchmark()
+
+    def _window_start(self):
+        today = datetime.date.today()
+        if self._range == "YBB":
+            return datetime.date(today.year, 1, 1)
+        days = RANGE_DAYS.get(self._range)
+        if days is None:  # "Tümü"
+            return None
+        return today - datetime.timedelta(days=days)
+
+    @staticmethod
+    def _filter_points(points, start):
+        if start is None:
+            return list(points)
+        return [p for p in points if p[0] >= start]
+
+    # ---------- Çizim ----------
+    def _render_performance(self):
         self.plot_widget.clear()
-        self.benchmark_plot.clear()
+        start = self._window_start()
+        hist = [h for h in self._history if start is None or h["date"] >= start]
 
-        if len(history) >= 2:
+        if len(hist) >= 2:
             self.empty_perf_label.setVisible(False)
             self.plot_widget.setVisible(True)
-            xs = [time.mktime(h["date"].timetuple()) for h in history]
-            value_series = [h["total_value_try"] for h in history]
-            cost_series = [h["total_cost_try"] for h in history]
-            self.plot_widget.plot(xs, value_series,
+            xs = [time.mktime(h["date"].timetuple()) for h in hist]
+            self.plot_widget.plot(xs, [h["total_value_try"] for h in hist],
                                   pen=pg.mkPen(color=COLORS[self._theme]["secondary"], width=3),
                                   name="Portföy Değeri")
-            self.plot_widget.plot(xs, cost_series,
+            self.plot_widget.plot(xs, [h["total_cost_try"] for h in hist],
                                   pen=pg.mkPen(color=COLORS[self._theme]["text_secondary"], width=2,
                                                style=Qt.DashLine),
                                   name="Yatırılan Maliyet")
-
-            # Normalize getiri (başlangıç=100)
-            base = value_series[0] if value_series[0] > 0 else 1.0
-            norm = [v / base * 100 for v in value_series]
-            self.benchmark_plot.plot(xs, norm,
-                                     pen=pg.mkPen(color=COLORS[self._theme]["secondary"], width=3),
-                                     name="Portföy")
         else:
             self.empty_perf_label.setVisible(True)
             self.plot_widget.setVisible(False)
+
+    def _render_benchmark(self):
+        if not hasattr(self, "benchmark_plot"):
+            return
+        self.benchmark_plot.clear()
+        start = self._window_start()
+
+        # Tüm serileri tek sözlükte topla (Portföy + benchmark'lar)
+        all_series = {}
+        if self._history:
+            all_series["Portföy"] = [(h["date"], h["total_value_try"]) for h in self._history]
+        for name, pts in self._benchmark.items():
+            all_series[name] = pts
+
+        plotted = 0
+        for name, pts in all_series.items():
+            cb = self.series_checks.get(name)
+            if cb is not None and not cb.isChecked():
+                continue
+            window = self._filter_points(pts, start)
+            if len(window) < 2:
+                continue
+            base = window[0][1]
+            if base == 0:
+                continue
+            xs = [time.mktime(d.timetuple()) for d, _ in window]
+            ys = [v / base * 100 for _, v in window]
+            color = SERIES_COLORS.get(name, "#9CA3AF")
+            self.benchmark_plot.plot(xs, ys, pen=pg.mkPen(color=color, width=2), name=name)
+            plotted += 1
+
+        if plotted == 0:
+            self.benchmark_status.setText(
+                "Karşılaştırma verisi yok. (Portföy geçmişi birikmeli; benchmark "
+                "verisi internet bağlantısı gerektirir.)"
+            )
+        else:
+            self.benchmark_status.setText("")
+
+    def closeEvent(self, event):
+        if self._bench_loader is not None and self._bench_loader.isRunning():
+            self._bench_loader.wait(2000)
+        super().closeEvent(event)
