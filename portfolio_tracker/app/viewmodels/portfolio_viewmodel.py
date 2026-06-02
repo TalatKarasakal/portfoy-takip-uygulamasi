@@ -8,6 +8,7 @@ from app.services.currency_service import CurrencyService
 from app.services.portfolio_service import PortfolioService
 from app.services.snapshot_service import SnapshotService
 from app.services.price_history_service import PriceHistoryService
+from app.utils.display import display
 from app.utils.logger import app_logger
 
 
@@ -219,8 +220,19 @@ class PortfolioViewModel(QObject):
     def _on_data_loaded_success(self, items, kpi_data):
         self.cached_portfolio_data = items
         self.cached_kpi_data = kpi_data
+        # Görüntüleme kuru güncellensin ki view'lar doğru çevirsin
+        display.set_rate(kpi_data.get("usd_try", 0))
         self.data_loaded.emit(items)
         self.kpi_updated.emit(kpi_data)
+
+    def refresh_display(self):
+        """Para birimi/biçim değişiminde önbellekteki veriyle yeniden render eder
+        (ağdan tekrar çekmeden)."""
+        if self.cached_kpi_data:
+            display.set_rate(self.cached_kpi_data.get("usd_try", 0))
+        self.data_loaded.emit(self.cached_portfolio_data)
+        if self.cached_kpi_data:
+            self.kpi_updated.emit(self.cached_kpi_data)
 
     @Slot(str)
     def _on_data_loaded_error(self, err):

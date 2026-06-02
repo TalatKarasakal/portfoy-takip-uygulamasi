@@ -162,7 +162,16 @@ class MainWindow(QMainWindow):
                 view.apply_chart_theme(theme)
 
     def on_settings_for_runtime(self, settings_dict):
-        """Maliyet metodu ve yenileme aralığı gibi çalışma-zamanı ayarlarını uygular."""
+        """Maliyet metodu, para birimi ve yenileme aralığı gibi çalışma-zamanı
+        ayarlarını uygular."""
+        from app.utils.display import display
+
+        # Görüntüleme para birimi (TRY/USD)
+        prev_mode = display.mode
+        display.set_mode(settings_dict.get("default_currency", "TRY"))
+        if display.mode != prev_mode:
+            self.portfolio_vm.refresh_display()
+
         # Maliyet metodu
         method = settings_dict.get("cost_method", "WAC")
         self.portfolio_vm.set_cost_method(method)

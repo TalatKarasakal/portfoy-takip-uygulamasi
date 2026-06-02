@@ -5,6 +5,7 @@ from PySide6.QtCore import Qt, QAbstractTableModel, QModelIndex
 from PySide6.QtGui import QColor
 import qtawesome as qta
 from app.utils.formatters import format_currency, format_percent
+from app.utils.display import display
 from app.views.transactions_view import AddTransactionDialog
 from app.views.widgets.table_filter import TableFilterProxyModel
 from app.views.widgets.asset_chart_dialog import AssetChartDialog
@@ -40,12 +41,12 @@ class PortfolioTableModel(QAbstractTableModel):
             elif col == self.COL_NAME: return row.get("name", "")
             elif col == self.COL_TYPE: return row.get("type", "")
             elif col == self.COL_QTY: return f"{row.get('quantity', 0):,.2f}"
-            elif col == self.COL_AVG: return format_currency(row.get("avg_cost", 0))
-            elif col == self.COL_PRICE: return format_currency(row.get("current_price", 0))
-            elif col == self.COL_TOTCOST: return format_currency(row.get("total_cost", 0))
-            elif col == self.COL_VALUE: return format_currency(row.get("current_value", 0))
-            elif col == self.COL_DAILY: return format_currency(row.get("daily_change", 0))
-            elif col == self.COL_PNL: return format_currency(self._pnl(row))
+            elif col == self.COL_AVG: return display.format(row.get("avg_cost", 0))
+            elif col == self.COL_PRICE: return display.format(row.get("current_price", 0))
+            elif col == self.COL_TOTCOST: return display.format(row.get("total_cost", 0))
+            elif col == self.COL_VALUE: return display.format(row.get("current_value", 0))
+            elif col == self.COL_DAILY: return display.format(row.get("daily_change", 0))
+            elif col == self.COL_PNL: return display.format(self._pnl(row))
             elif col == self.COL_PNL_PCT:
                 cost = row.get("total_cost", 0)
                 pct = (self._pnl(row) / cost * 100) if cost > 0 else 0
@@ -245,7 +246,7 @@ class PortfolioView(QWidget):
         total_value = sum(i.get("current_value", 0) for i in portfolio_items)
         self.footer_label.setText(
             f"Toplam Kayıt: {len(portfolio_items)}   |   "
-            f"Toplam Değer: {format_currency(total_value)}"
+            f"Toplam Değer: {display.format(total_value)}"
         )
 
     def on_kpi_updated(self, kpi_data):

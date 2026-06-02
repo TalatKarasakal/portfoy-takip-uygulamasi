@@ -7,6 +7,7 @@ import pyqtgraph as pg
 from app.views.widgets.kpi_card import KPICard
 from app.views.transactions_view import TransactionTableModel
 from app.utils.formatters import format_currency, format_percent
+from app.utils.display import display
 from app.config import COLORS
 
 # Donut grafiği dilim renk paleti (Türk kırmızısı vurgu rengi K/Z için kullanılmaz,
@@ -110,13 +111,10 @@ class DashboardView(QWidget):
         self.line_view.setTitle("Portföy Değeri (Son 90 Gün)", color=palette["text_primary"])
 
     def update_kpi_cards(self, data: dict):
-        # Toplam değer + USD alt satırı
-        self.total_val_card.set_value(data.get("total_value_try", 0))
-        usd = data.get("total_value_usd", 0)
-        if usd:
-            self.total_val_card.set_subtitle(format_currency(usd, symbol="$"))
-        else:
-            self.total_val_card.set_subtitle("")
+        # Toplam değer + karşı para birimi alt satırı
+        total_try = data.get("total_value_try", 0)
+        self.total_val_card.set_value(total_try)
+        self.total_val_card.set_subtitle(display.format_opposite(total_try))
 
         # Bugünkü değişim (TL ana, yüzde alt)
         daily = data.get("daily_change_try", 0)

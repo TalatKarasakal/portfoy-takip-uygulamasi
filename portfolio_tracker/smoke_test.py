@@ -143,6 +143,20 @@ def main():
     ExportColumnsDialog(win)
     app.processEvents()
 
+    # USD görünüm modunu test et (çevirip yeniden render)
+    from app.utils.display import display
+    display.set_mode("USD")
+    display.set_rate(32.0)
+    win.views["dashboard"].update_kpi_cards(kpi)
+    win.views["portfolio"].on_data_loaded(items)
+    win.views["transactions"].on_data_loaded([
+        {"id": 1, "asset_id": 1, "date": "2024-01-15", "date_obj": datetime.date(2024, 1, 15),
+         "asset_code": "THYAO", "type": "DIVIDEND", "quantity": 100, "unit_price": 2.0,
+         "commission": 0.0, "tax": 15.0, "total": 185.0, "note": "temettü"},
+    ])
+    app.processEvents()
+    display.set_mode("TRY")
+
     print("SMOKE_OK")
 
 

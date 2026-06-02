@@ -1,6 +1,7 @@
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel
 from PySide6.QtCore import QVariantAnimation, Qt
 from app.utils.formatters import format_currency, format_percent
+from app.utils.display import display
 
 
 class KPICard(QWidget):
@@ -38,7 +39,7 @@ class KPICard(QWidget):
 
     def _format(self, value: float) -> str:
         if self.formatter_type == "currency":
-            return format_currency(value)
+            return display.format(value)
         elif self.formatter_type == "percent":
             return format_percent(value)
         return str(value)
