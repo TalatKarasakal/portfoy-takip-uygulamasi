@@ -94,6 +94,7 @@ class MainWindow(QMainWindow):
         self.settings_vm.settings_loaded.connect(self.apply_theme)
         self.settings_vm.settings_loaded.connect(self.on_settings_for_runtime)
         self.settings_vm.data_wiped.connect(lambda: self.portfolio_vm.load_data())
+        self.settings_vm.data_changed.connect(lambda: self.portfolio_vm.load_data())
         self.alerts_vm.alert_triggered.connect(self._on_alert_triggered)
 
         # Otomatik yenileme zamanlayıcısı (view'lar kurulmadan önce hazır olmalı;
@@ -109,7 +110,7 @@ class MainWindow(QMainWindow):
             "transactions": TransactionsView(self.transaction_vm),
             "analytics": AnalyticsView(self.analytics_vm, self.portfolio_vm),
             "alerts": AlertsView(self.alerts_vm, self.portfolio_vm),
-            "settings": SettingsView(self.settings_vm)
+            "settings": SettingsView(self.settings_vm, self.portfolio_vm)
         }
 
         for view_name, view_widget in self.views.items():

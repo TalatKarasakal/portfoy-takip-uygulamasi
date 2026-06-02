@@ -16,6 +16,8 @@ class SettingsViewModel(QObject):
     error_occurred = Signal(str)
     success_message = Signal(str)
     data_wiped = Signal()
+    data_changed = Signal()                 # import sonrası portföyü tazele
+    percentage_import_needed = Signal(str)  # (dosya yolu) — toplam değer sorulmalı
 
     default_settings = {
         "theme": "system",
@@ -51,24 +53,48 @@ class SettingsViewModel(QObject):
         except Exception as e:
             self.error_occurred.emit(str(e))
 
-    def export_data(self, file_path: str):
+    def export_data(self, file_path: str, columns=None, portfolio_items=None):
         try:
             with get_session() as session:
-                ImportExportService.export_excel(session, file_path)
+                ImportExportService.export_excel(
+                    session, file_path, portfolio_items=portfolio_items, columns=columns
+                )
             self.success_message.emit("Dışa aktarma işlemi başarıyla tamamlandı.")
         except Exception as e:
             self.error_occurred.emit(f"Dışa aktarma hatası: {str(e)}")
 
     def import_data(self, file_path: str):
+        # Yüzdelik senaryosu toplam değer gerektirir; view'a sinyal gönderilir.
+        try:
+            if ImportExportService.detect_percentage(file_path):
+                self.percentage_import_needed.emit(file_path)
+                return
+        except Exception as e:
+            self.error_occurred.emit(f"İçeri aktarma hatası: {str(e)}")
+            return
+
         try:
             with get_session() as session:
                 success = ImportExportService.import_excel(session, file_path)
             if success:
                 self.success_message.emit("İçeri aktarma işlemi başarıyla tamamlandı.")
+                self.data_changed.emit()
             else:
-                self.error_occurred.emit("İçeri aktarma sırasında veri format hatası oluştu.")
+                self.error_occurred.emit("İçeri aktarma sırasında uygun veri formatı bulunamadı.")
         except Exception as e:
             self.error_occurred.emit(f"İçeri aktarma hatası: {str(e)}")
+
+    def import_percentage(self, file_path: str, total_value: float):
+        try:
+            with get_session() as session:
+                success = ImportExportService.import_percentage(session, file_path, total_value)
+            if success:
+                self.success_message.emit("Yüzdelik portföy başarıyla içeri aktarıldı.")
+                self.data_changed.emit()
+            else:
+                self.error_occurred.emit("Yüzdelik içeri aktarma başarısız oldu.")
+        except Exception as e:
+            self.error_occurred.emit(f"Yüzdelik içeri aktarma hatası: {str(e)}")
 
     def create_backup(self):
         try:

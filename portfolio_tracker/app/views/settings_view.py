@@ -1,15 +1,51 @@
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QFormLayout, QComboBox,
                                  QPushButton, QLabel, QGroupBox, QHBoxLayout, QFileDialog,
-                                 QMessageBox, QCheckBox, QScrollArea)
+                                 QMessageBox, QCheckBox, QScrollArea, QDialog, QInputDialog,
+                                 QApplication)
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QCursor
+
+from app.services.import_export_service import PORTFOLIO_EXPORT_COLUMNS
 
 APP_VERSION = "1.0.0"
 
 
+class ExportColumnsDialog(QDialog):
+    """Dışa aktarılacak portföy sütunlarını seçtiren diyalog."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Dışa Aktarılacak Sütunlar")
+        self.setMinimumWidth(320)
+        layout = QVBoxLayout(self)
+        layout.addWidget(QLabel("Portföy sayfasına eklenecek sütunlar:"))
+
+        self.checks = {}
+        for col in PORTFOLIO_EXPORT_COLUMNS:
+            cb = QCheckBox(col)
+            cb.setChecked(True)
+            self.checks[col] = cb
+            layout.addWidget(cb)
+
+        btns = QHBoxLayout()
+        btns.addStretch()
+        cancel = QPushButton("İptal")
+        cancel.clicked.connect(self.reject)
+        ok = QPushButton("Dışa Aktar")
+        ok.clicked.connect(self.accept)
+        btns.addWidget(cancel)
+        btns.addWidget(ok)
+        layout.addLayout(btns)
+
+    def selected_columns(self):
+        return [c for c, cb in self.checks.items() if cb.isChecked()]
+
+
 class SettingsView(QWidget):
-    def __init__(self, view_model):
+    def __init__(self, view_model, portfolio_vm=None):
         super().__init__()
         self.view_model = view_model
+        self.portfolio_vm = portfolio_vm
 
         # Kaydırılabilir içerik (küçük pencerelerde taşmasın)
         outer = QVBoxLayout(self)
@@ -100,6 +136,7 @@ class SettingsView(QWidget):
         self.view_model.settings_loaded.connect(self.on_settings_loaded)
         self.view_model.success_message.connect(self.on_success)
         self.view_model.error_occurred.connect(self.on_error)
+        self.view_model.percentage_import_needed.connect(self.on_percentage_import_needed)
         # Not: load_settings() MainWindow tarafından kurulum tamamlandıktan sonra
         # çağrılır; burada çağırmak view'lar/timer hazır olmadan sinyal tetikler.
 
@@ -137,14 +174,37 @@ class SettingsView(QWidget):
                 self.view_model.restore_backup(path)
 
     def on_export_clicked(self):
+        col_dialog = ExportColumnsDialog(self)
+        if not col_dialog.exec():
+            return
+        columns = col_dialog.selected_columns()
+        if not columns:
+            QMessageBox.warning(self, "Hata", "En az bir sütun seçmelisiniz.")
+            return
         path, _ = QFileDialog.getSaveFileName(self, "Excel'e Aktar", "portfoy.xlsx", "Excel (*.xlsx)")
         if path:
-            self.view_model.export_data(path)
+            items = self.portfolio_vm.cached_portfolio_data if self.portfolio_vm else None
+            self.view_model.export_data(path, columns=columns, portfolio_items=items)
 
     def on_import_clicked(self):
         path, _ = QFileDialog.getOpenFileName(self, "Excel Seç", "", "Excel (*.xlsx)")
         if path:
             self.view_model.import_data(path)
+
+    def on_percentage_import_needed(self, path):
+        total, ok = QInputDialog.getDouble(
+            self, "Toplam Portföy Değeri",
+            "Yüzdelik dağılım tespit edildi.\nToplam portföy değerini (TL) girin:",
+            100000.0, 0.0, 1_000_000_000.0, 2
+        )
+        if not ok or total <= 0:
+            return
+        # Güncel fiyat çekimi sürebilir; bekleme imleci göster
+        QApplication.setOverrideCursor(QCursor(Qt.WaitCursor))
+        try:
+            self.view_model.import_percentage(path, total)
+        finally:
+            QApplication.restoreOverrideCursor()
 
     def on_delete_all_clicked(self):
         confirm = QMessageBox.warning(

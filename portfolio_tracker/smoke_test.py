@@ -33,6 +33,7 @@ from app.views.main_window import MainWindow
 from app.views.portfolio_view import AssetDialog
 from app.views.transactions_view import AddTransactionDialog
 from app.views.alerts_view import AddAlertDialog
+from app.views.settings_view import ExportColumnsDialog
 
 import datetime
 
@@ -139,6 +140,7 @@ def main():
         "asset_id": 1, "type": "SELL", "date_obj": datetime.date(2024, 1, 1),
         "quantity": 10, "unit_price": 5, "commission": 1, "tax": 0, "note": "n"})
     AddAlertDialog([{"id": 1, "code": "THYAO"}], win)
+    ExportColumnsDialog(win)
     app.processEvents()
 
     print("SMOKE_OK")
