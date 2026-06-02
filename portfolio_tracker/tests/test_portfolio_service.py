@@ -86,3 +86,35 @@ def test_xirr_calculation():
     cash_flows = [(t0, -1000.0), (t1, 1100.0)]
     rate = PortfolioService.calculate_xirr(cash_flows)
     assert 0.09 < rate < 0.11 # ~10%
+
+
+def test_full_exit_keeps_realized_pnl():
+    # Pozisyondan tamamen çıkıldığında bile gerçekleşmiş K/Z hesaplanmalı.
+    # (Loader bu değeri portföyden çıkılan varlıklar için de toplar.)
+    txs = [
+        build_tx(TransactionType.BUY, 10, 100, "2023-01-01"),
+        build_tx(TransactionType.SELL, 10, 120, "2023-02-01"),
+    ]
+    res = PortfolioService.calculate_cost_and_pnl(txs, current_price=0, method="WAC")
+    assert res["remaining_quantity"] == 0
+    assert abs(res["realized_pnl"] - 200) < 1e-6  # (120 - 100) * 10
+    assert res["unrealized_pnl"] == 0
+
+
+def test_risk_metrics_insufficient_data():
+    empty = {"sharpe": 0.0, "volatility": 0.0, "max_drawdown": 0.0}
+    assert PortfolioService.calculate_risk_metrics([]) == empty
+    assert PortfolioService.calculate_risk_metrics([100]) == empty
+
+
+def test_risk_metrics_max_drawdown():
+    # 100 -> 50 => -%50 düşüş, sonra kısmi toparlanma
+    res = PortfolioService.calculate_risk_metrics([100, 50, 75])
+    assert abs(res["max_drawdown"] - (-0.5)) < 1e-9
+    assert res["volatility"] >= 0
+
+
+def test_risk_metrics_no_drawdown_when_monotonic():
+    res = PortfolioService.calculate_risk_metrics([100, 101, 102, 103])
+    assert res["max_drawdown"] == 0.0
+    assert res["sharpe"] > 0  # sürekli artış pozitif Sharpe verir

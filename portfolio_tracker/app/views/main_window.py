@@ -5,8 +5,6 @@ import qtawesome as qta
 import os
 import sys
 
-from app.config import COLORS
-
 
 class MainWindow(QMainWindow):
     def __init__(self):
