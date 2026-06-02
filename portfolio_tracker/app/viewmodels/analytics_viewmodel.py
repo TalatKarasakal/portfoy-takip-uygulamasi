@@ -45,6 +45,14 @@ class AnalyticsViewModel(QObject):
                 alloc_asset = [{"name": item["code"], "value": item["current_value"]} for item in portfolio_items if item["current_value"] > 0]
                 alloc_asset.sort(key=lambda x: x["value"], reverse=True)
 
+                # 3b. Varlık K/Z katkısı (attribution) — TL bazında
+                attribution = [
+                    {"code": item["code"],
+                     "pnl": item.get("realized_pnl", 0) + item.get("unrealized_pnl", 0)}
+                    for item in portfolio_items
+                ]
+                attribution.sort(key=lambda x: x["pnl"], reverse=True)
+
                 # 4. Performans zaman serisi (gerçek snapshot geçmişi)
                 history = SnapshotService.get_history(session)
 
@@ -57,6 +65,7 @@ class AnalyticsViewModel(QObject):
                     "xirr": xirr_val,
                     "allocation_type": alloc_type,
                     "allocation_asset": alloc_asset,
+                    "attribution": attribution,
                     "history": history,
                     "sharpe": metrics["sharpe"],
                     "volatility": metrics["volatility"],

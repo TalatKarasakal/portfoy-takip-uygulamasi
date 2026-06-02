@@ -179,6 +179,32 @@ class PortfolioService:
         return {"sharpe": sharpe, "volatility": volatility, "max_drawdown": max_dd}
 
     @staticmethod
+    def monthly_returns(history: List[Dict[str, Any]]) -> Dict[Tuple[int, int], float]:
+        """Snapshot geçmişinden aylık yüzde getirileri hesaplar.
+
+        Her ay için değer, o aydaki son snapshot kabul edilir. Getiri yalnızca
+        bir önceki TAKVİM ayında veri varsa hesaplanır (boşluklar atlanır).
+
+        Args:
+            history: [{"date": date, "total_value_try": float}, ...]
+
+        Returns:
+            {(yıl, ay): yüzde_getiri}
+        """
+        month_end: Dict[Tuple[int, int], float] = {}
+        for h in history:
+            d = h["date"]
+            month_end[(d.year, d.month)] = h["total_value_try"]
+
+        returns: Dict[Tuple[int, int], float] = {}
+        for (y, m), val in month_end.items():
+            pm = (y - 1, 12) if m == 1 else (y, m - 1)
+            prev = month_end.get(pm)
+            if prev:
+                returns[(y, m)] = (val / prev - 1) * 100
+        return returns
+
+    @staticmethod
     def calculate_xirr(cash_flows: List[Tuple[datetime.date, float]]) -> float:
         """
         Para-ağırlıklı getiri (XIRR) hesaplar.

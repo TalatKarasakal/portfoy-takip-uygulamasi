@@ -157,3 +157,19 @@ def test_split_fifo():
     assert abs(res["remaining_quantity"] - 20) < 1e-6
     assert abs(res["average_cost"] - 50) < 1e-6
     assert abs(res["unrealized_pnl"] - 200) < 1e-6
+
+
+def test_monthly_returns():
+    history = [
+        {"date": datetime.date(2024, 1, 31), "total_value_try": 1000.0},
+        {"date": datetime.date(2024, 2, 29), "total_value_try": 1100.0},  # +%10
+        {"date": datetime.date(2024, 3, 31), "total_value_try": 990.0},   # -%10
+        {"date": datetime.date(2024, 5, 31), "total_value_try": 1200.0},  # Nisan boş -> atlanır
+    ]
+    r = PortfolioService.monthly_returns(history)
+    assert abs(r[(2024, 2)] - 10.0) < 1e-6
+    assert abs(r[(2024, 3)] - (-10.0)) < 1e-6
+    # Mayıs'ın bir önceki takvim ayı (Nisan) yok -> getiri hesaplanmaz
+    assert (2024, 5) not in r
+    # Ocak'ın öncesi yok
+    assert (2024, 1) not in r

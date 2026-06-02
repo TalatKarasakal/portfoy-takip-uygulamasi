@@ -103,8 +103,13 @@ def main():
         "xirr": 0.18, "sharpe": 1.2, "volatility": 0.25, "max_drawdown": -0.15,
         "allocation_type": {"BIST": 30000.0, "TEFAS": 18000.0},
         "allocation_asset": [{"name": "THYAO", "value": 30000.0}, {"name": "AFT", "value": 18000.0}],
+        "attribution": [{"code": "THYAO", "pnl": 5500.0}, {"code": "AFT", "pnl": -2000.0}],
         "history": kpi["history"],
     })
+    # Analiz iç sekmelerini gez (Takvim dahil)
+    for i in range(win.views["analytics"].tabs.count()):
+        win.views["analytics"].tabs.setCurrentIndex(i)
+        app.processEvents()
     win.views["alerts"].on_alerts_loaded([
         {"id": 1, "asset_id": 1, "asset_code": "THYAO", "type": None,
          "type_label": "Fiyat şunun üstüne çıkarsa", "threshold": 320.0,

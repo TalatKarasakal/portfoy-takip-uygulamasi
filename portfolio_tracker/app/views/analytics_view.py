@@ -2,7 +2,9 @@ import datetime
 import time
 
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTabWidget,
-                                 QLabel, QPushButton, QButtonGroup, QCheckBox)
+                                 QLabel, QPushButton, QButtonGroup, QCheckBox,
+                                 QTableWidget, QTableWidgetItem, QHeaderView,
+                                 QAbstractItemView)
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtGui import QPainter, QColor
 from PySide6.QtCharts import QChart, QChartView, QPieSeries
@@ -60,6 +62,7 @@ class AnalyticsView(QWidget):
         self.tabs.addTab(self._create_performance_tab(), "Performans")
         self.tabs.addTab(self._create_allocation_tab(), "Dağılım")
         self.tabs.addTab(self._create_benchmark_tab(), "Karşılaştırma")
+        self.tabs.addTab(self._create_calendar_tab(), "Takvim")
         layout.addWidget(self.tabs)
 
         self.analytics_vm.analytics_loaded.connect(self.on_analytics_loaded)
@@ -112,7 +115,9 @@ class AnalyticsView(QWidget):
 
     def _create_allocation_tab(self):
         widget = QWidget()
-        layout = QHBoxLayout(widget)
+        outer = QVBoxLayout(widget)
+        donut_row = QWidget()
+        layout = QHBoxLayout(donut_row)
 
         self.type_donut_series = QPieSeries()
         self.type_donut_series.setHoleSize(0.4)
@@ -138,6 +143,36 @@ class AnalyticsView(QWidget):
 
         layout.addWidget(self.type_donut_view)
         layout.addWidget(self.asset_donut_view)
+
+        outer.addWidget(donut_row, 2)
+
+        # Varlık K/Z katkısı (attribution) çubuk grafiği
+        attr_title = QLabel("Varlık K/Z Katkısı (TL)")
+        attr_title.setProperty("class", "CardTitle")
+        outer.addWidget(attr_title)
+        self.attr_plot = pg.PlotWidget()
+        self.attr_plot.setBackground("transparent")
+        self.attr_plot.showGrid(x=False, y=True, alpha=0.3)
+        outer.addWidget(self.attr_plot, 1)
+        return widget
+
+    def _create_calendar_tab(self):
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        info = QLabel("Aylık getiriler portföy değer geçmişinden (snapshot) hesaplanır.")
+        info.setWordWrap(True)
+        layout.addWidget(info)
+        self.calendar_table = QTableWidget(0, 13)
+        self.calendar_table.setHorizontalHeaderLabels(
+            ["Yıl", "Oca", "Şub", "Mar", "Nis", "May", "Haz",
+             "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"]
+        )
+        self.calendar_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.calendar_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        layout.addWidget(self.calendar_table)
+        self.calendar_empty = QLabel("Henüz yeterli geçmiş veri yok.")
+        self.calendar_empty.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self.calendar_empty)
         return widget
 
     def _create_benchmark_tab(self):
@@ -183,7 +218,8 @@ class AnalyticsView(QWidget):
             if chart is not None:
                 chart.setTitleBrush(text_color)
                 chart.legend().setLabelColor(text_color)
-        for plot in (getattr(self, "plot_widget", None), getattr(self, "benchmark_plot", None)):
+        for plot in (getattr(self, "plot_widget", None), getattr(self, "benchmark_plot", None),
+                     getattr(self, "attr_plot", None)):
             if plot is not None:
                 for ax_name in ("left", "bottom"):
                     ax = plot.getAxis(ax_name)
@@ -211,9 +247,13 @@ class AnalyticsView(QWidget):
                 QColor(PIE_PALETTE[i % len(PIE_PALETTE)])
             )
 
+        # Varlık K/Z katkısı + aylık getiri takvimi
+        self._render_attribution(data.get("attribution", []))
+
         # Geçmiş & yeniden çizim
         self._history = data.get("history", [])
         self._render_performance()
+        self._render_calendar(self._history)
 
         # Benchmark verisini bir kez (portföy aralığı, en az 1 yıl) arka planda çek;
         # sonra bellekte tutulan veriyle yeniden çiz (her yenilemede yeni thread açma).
@@ -230,6 +270,52 @@ class AnalyticsView(QWidget):
     def _on_benchmark_loaded(self, series: dict):
         self._benchmark = series or {}
         self._render_benchmark()
+
+    def _render_attribution(self, attribution):
+        if not hasattr(self, "attr_plot"):
+            return
+        self.attr_plot.clear()
+        items = attribution[:15]
+        if not items:
+            return
+        xs = list(range(len(items)))
+        heights = [it["pnl"] for it in items]
+        brushes = ["#10B981" if h >= 0 else "#DC2626" for h in heights]
+        bar = pg.BarGraphItem(x=xs, height=heights, width=0.6, brushes=brushes)
+        self.attr_plot.addItem(bar)
+        ticks = [(i, items[i]["code"]) for i in range(len(items))]
+        self.attr_plot.getAxis("bottom").setTicks([ticks])
+
+    def _render_calendar(self, history):
+        if not hasattr(self, "calendar_table"):
+            return
+        self.calendar_table.setRowCount(0)
+        if len(history) < 2:
+            self.calendar_empty.setVisible(True)
+            self.calendar_table.setVisible(False)
+            return
+
+        from app.services.portfolio_service import PortfolioService
+        returns = PortfolioService.monthly_returns(history)
+
+        if not returns:
+            self.calendar_empty.setVisible(True)
+            self.calendar_table.setVisible(False)
+            return
+
+        self.calendar_empty.setVisible(False)
+        self.calendar_table.setVisible(True)
+        years = sorted({y for (y, _m) in returns})
+        for y in years:
+            r = self.calendar_table.rowCount()
+            self.calendar_table.insertRow(r)
+            self.calendar_table.setItem(r, 0, QTableWidgetItem(str(y)))
+            for m in range(1, 13):
+                val = returns.get((y, m))
+                cell = QTableWidgetItem("" if val is None else f"{val:+.1f}%")
+                if val is not None:
+                    cell.setForeground(QColor("#10B981" if val >= 0 else "#DC2626"))
+                self.calendar_table.setItem(r, m, cell)
 
     # ---------- Aralık / filtreleme ----------
     def _on_range_changed(self, rng: str):
