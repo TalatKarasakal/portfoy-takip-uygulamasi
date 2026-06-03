@@ -1,11 +1,50 @@
 import shutil
 import os
 import glob
-from datetime import datetime
+from datetime import datetime, timedelta
 from app.config import DATABASE_FILE, BACKUP_DIR
 from app.utils.logger import app_logger
 
 class BackupService:
+    @staticmethod
+    def maybe_auto_backup(days: int = 7) -> bool:
+        """Son yedekten `days` günden fazla geçtiyse otomatik yedek alır.
+
+        Son yedek tarihi `settings` tablosundaki `last_backup_date` anahtarından
+        okunur/yazılır. Açılışta çağrılması beklenir.
+        """
+        try:
+            # Geç import: model registry ve session hazır olduktan sonra
+            from app.database.session import get_session
+            from app.models.settings import Settings
+
+            with get_session() as session:
+                row = session.query(Settings).filter_by(key="last_backup_date").first()
+                last_str = row.value if row else None
+                needs = True
+                if last_str:
+                    try:
+                        last = datetime.strptime(last_str, "%Y-%m-%d")
+                        needs = (datetime.now() - last) >= timedelta(days=days)
+                    except ValueError:
+                        needs = True
+
+                if not needs:
+                    return False
+
+                if BackupService.create_backup():
+                    today = datetime.now().strftime("%Y-%m-%d")
+                    if row:
+                        row.value = today
+                    else:
+                        session.add(Settings(key="last_backup_date", value=today))
+                    session.commit()
+                    return True
+            return False
+        except Exception as e:
+            app_logger.error(f"Otomatik yedek başarısız: {e}")
+            return False
+
     @staticmethod
     def create_backup() -> bool:
         """Portföy veritabanını yedekler ve rotasyon yönetir."""

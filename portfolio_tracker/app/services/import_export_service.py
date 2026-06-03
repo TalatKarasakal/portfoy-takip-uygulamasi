@@ -1,44 +1,80 @@
 import pandas as pd
 import datetime
+from typing import Any, Dict, List, Optional
 from sqlalchemy.orm import Session
 from app.models.asset import Asset, AssetType
 from app.models.transaction import Transaction, TransactionType
 from app.utils.logger import app_logger
 
+# Portföy dışa aktarımında seçilebilir tüm sütunlar (sıra korunur)
+PORTFOLIO_EXPORT_COLUMNS = [
+    "Kod", "Ad", "Tür", "Adet", "Ort. Maliyet", "Güncel Fiyat",
+    "Toplam Maliyet", "Güncel Değer", "Toplam K/Z", "K/Z %", "Portföy %",
+]
+
+
 class ImportExportService:
     @staticmethod
-    def export_excel(session: Session, file_path: str):
-        """Tüm portföyü Excel'e dışa aktarır."""
-        # Portföy durumu (TODO: Güncel fiyatlar eklenecek)
-        assets = session.query(Asset).all()
-        asset_data = []
-        for a in assets:
-            asset_data.append({
-                "Kod": a.code,
-                "Ad": a.name,
-                "Tür": a.asset_type.name,
-                "Para Birimi": a.currency
-            })
-            
-        # İşlemler
-        txs = session.query(Transaction).all()
+    def export_excel(
+        session: Session,
+        file_path: str,
+        portfolio_items: Optional[List[Dict[str, Any]]] = None,
+        columns: Optional[List[str]] = None,
+    ):
+        """Portföyü ve işlem geçmişini Excel'e dışa aktarır.
+
+        Args:
+            portfolio_items: Güncel fiyat/değer içeren hesaplanmış liste
+                (PortfolioViewModel.cached_portfolio_data). Verilirse "Portföy"
+                sayfası güncel değerlerle yazılır; verilmezse varlık listesi yazılır.
+            columns: Portföy sayfasında yer alacak sütun adları (None => tümü).
+        """
+        selected = columns or PORTFOLIO_EXPORT_COLUMNS
+        portfolio_rows = []
+
+        if portfolio_items:
+            for it in portfolio_items:
+                pnl = it.get("realized_pnl", 0) + it.get("unrealized_pnl", 0)
+                cost = it.get("total_cost", 0)
+                pnl_pct = (pnl / cost * 100) if cost else 0
+                full = {
+                    "Kod": it.get("code", ""),
+                    "Ad": it.get("name", ""),
+                    "Tür": it.get("type", ""),
+                    "Adet": it.get("quantity", 0),
+                    "Ort. Maliyet": it.get("avg_cost", 0),
+                    "Güncel Fiyat": it.get("current_price", 0),
+                    "Toplam Maliyet": cost,
+                    "Güncel Değer": it.get("current_value", 0),
+                    "Toplam K/Z": pnl,
+                    "K/Z %": pnl_pct,
+                    "Portföy %": it.get("portfolio_pct", 0),
+                }
+                portfolio_rows.append({c: full[c] for c in selected if c in full})
+        else:
+            # Fiyat verisi yoksa temel varlık listesi
+            for a in session.query(Asset).all():
+                full = {"Kod": a.code, "Ad": a.name, "Tür": a.asset_type.name}
+                portfolio_rows.append({c: full[c] for c in selected if c in full})
+
+        # İşlemler (her zaman tam)
         tx_data = []
-        for tx in txs:
+        for tx in session.query(Transaction).all():
             tx_data.append({
                 "Tarih": tx.date,
-                "Varlık Kodu": tx.asset.code,
+                "Varlık Kodu": tx.asset.code if tx.asset else "",
                 "İşlem Türü": tx.transaction_type.name,
                 "Adet": float(tx.quantity),
                 "Birim Fiyat": float(tx.unit_price),
                 "Komisyon": float(tx.commission),
                 "Vergi": float(tx.tax),
-                "Not": tx.note
+                "Not": tx.note,
             })
 
         with pd.ExcelWriter(file_path, engine='openpyxl') as writer:
-            pd.DataFrame(asset_data).to_excel(writer, sheet_name='Varlıklar', index=False)
+            pd.DataFrame(portfolio_rows).to_excel(writer, sheet_name='Portföy', index=False)
             pd.DataFrame(tx_data).to_excel(writer, sheet_name='İşlemler', index=False)
-            
+
         app_logger.info(f"Exported data to {file_path}")
 
     @staticmethod
@@ -64,9 +100,8 @@ class ImportExportService:
                 elif any("kod" in c for c in cols) and any("ad" in c for c in cols):
                     success_any = ImportExportService._process_assets_only(session, df) or success_any
                 
-                # Senaryo 1: Yüzdelik (Henüz Tam Aktif Değil)
-                elif any("kod" in c for c in cols) and any("yüzde" in c for c in cols):
-                    # TODO: Yüzdelik portföy aktarımı.
+                # Senaryo 1: Yüzdelik — ayrı akışla (toplam değer gerekir) ele alınır.
+                elif ImportExportService._is_percentage_cols(cols):
                     continue
                     
             if not success_any:
@@ -77,6 +112,113 @@ class ImportExportService:
                 
         except Exception as e:
             app_logger.error(f"Import error: {e}")
+            return False
+
+    @staticmethod
+    def _is_percentage_cols(cols) -> bool:
+        """Sütunlar 'kod + yüzde' yüzdelik senaryosuna mı uyuyor?"""
+        has_code = any("kod" in c for c in cols)
+        has_pct = any(("yüzde" in c) or ("yuzde" in c) or ("%" in c) or ("oran" in c) for c in cols)
+        # Diğer senaryoların belirleyici sütunları yoksa yüzdeliktir
+        has_other = any(("tarih" in c) or ("adet" in c) or ("maliyet" in c) for c in cols)
+        return has_code and has_pct and not has_other
+
+    @staticmethod
+    def detect_percentage(file_path: str) -> bool:
+        """Dosyada (herhangi bir sayfada) yüzdelik senaryo var mı kontrol eder."""
+        try:
+            dfs = pd.read_excel(file_path, sheet_name=None)
+            for _, df in dfs.items():
+                cols = [str(c).lower() for c in df.columns]
+                if ImportExportService._is_percentage_cols(cols):
+                    return True
+        except Exception as e:
+            app_logger.error(f"Yüzdelik tespiti hatası: {e}")
+        return False
+
+    @staticmethod
+    def import_percentage(session: Session, file_path: str, total_value: float) -> bool:
+        """Yüzdelik portföyü içeri aktarır.
+
+        Her satır için adet, (toplam_değer * yüzde/100) / güncel_fiyat olarak
+        hesaplanır. Güncel fiyat çekilemezse birim fiyat=hedef tutar, adet=1
+        olarak kaydedilir (değer doğru kalır, adet nominal olur).
+        """
+        from app.services.bist_service import BistService
+        from app.services.tefas_service import TefasService
+
+        try:
+            dfs = pd.read_excel(file_path, sheet_name=None)
+            bist = BistService()
+            tefas = TefasService()
+            any_added = False
+
+            for _, df in dfs.items():
+                cols = [str(c).lower() for c in df.columns]
+                if not ImportExportService._is_percentage_cols(cols):
+                    continue
+
+                # Kod ve yüzde sütunlarını bul
+                code_col = next((c for c in df.columns if "kod" in str(c).lower()), None)
+                pct_col = next((c for c in df.columns
+                                if any(k in str(c).lower() for k in ("yüzde", "yuzde", "%", "oran"))), None)
+                if code_col is None or pct_col is None:
+                    continue
+
+                for _, row in df.iterrows():
+                    raw_code = row.get(code_col)
+                    if pd.isna(raw_code):
+                        continue
+                    code = str(raw_code).strip().upper()
+                    if not code or code == "NAN":
+                        continue
+                    try:
+                        pct = float(row.get(pct_col))
+                    except (TypeError, ValueError):
+                        continue
+                    if pct <= 0:
+                        continue
+
+                    asset = session.query(Asset).filter_by(code=code).first()
+                    if not asset:
+                        a_type = AssetType.BIST if len(code) >= 4 else AssetType.TEFAS
+                        asset = Asset(code=code, name=code, asset_type=a_type)
+                        session.add(asset)
+                        session.flush()
+
+                    target_value = total_value * pct / 100.0
+                    if asset.asset_type == AssetType.BIST:
+                        price = bist.fetch_current_price(code)
+                    else:
+                        price = tefas.fetch_current_price(code)
+
+                    if price and price > 0:
+                        quantity = target_value / price
+                        unit_price = price
+                        note = "Excel Import - Yüzdelik"
+                    else:
+                        quantity = 1.0
+                        unit_price = target_value
+                        note = "Excel Import - Yüzdelik (fiyat alınamadı, adet nominal)"
+
+                    session.add(Transaction(
+                        asset_id=asset.id,
+                        transaction_type=TransactionType.BUY,
+                        date=datetime.date.today(),
+                        quantity=quantity,
+                        unit_price=unit_price,
+                        commission=0,
+                        tax=0,
+                        note=note,
+                    ))
+                    any_added = True
+
+            if any_added:
+                session.commit()
+            return any_added
+        except Exception as e:
+            app_logger.error(f"Yüzdelik import hatası: {e}")
+            session.rollback()
             return False
 
     @staticmethod

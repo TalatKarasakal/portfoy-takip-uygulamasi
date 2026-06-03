@@ -21,6 +21,12 @@ QWidget {
     padding: 10px;
 }
 
+#status_label {
+    color: #9CA3AF;
+    font-size: 12px;
+    padding: 6px;
+}
+
 /* Sidebar Navigasyon Butonları */
 QPushButton[objectName^="nav_btn_"] {
     background-color: transparent;
@@ -65,10 +71,163 @@ QPushButton[objectName^="nav_btn_"]:checked {
     color: #E5E7EB;
 }
 
+.CardSubtitle {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 13px;
+    color: #9CA3AF;
+}
+
 .ProfitText {
     color: #10B981;
 }
 
 .LossText {
     color: #DC2626;
+}
+
+/* Tablo Stilleri */
+QTableView {
+    background-color: #1A1D23;
+    alternate-background-color: #15171C;
+    border: 1px solid #2A2F38;
+    border-radius: 8px;
+    color: #E5E7EB;
+    gridline-color: #2A2F38;
+    selection-background-color: #2A2F38;
+    selection-color: #FFFFFF;
+}
+
+QTableView::item {
+    padding: 6px;
+}
+
+QHeaderView::section {
+    background-color: #15171C;
+    color: #9CA3AF;
+    padding: 8px;
+    font-weight: bold;
+    border: none;
+    border-bottom: 1px solid #2A2F38;
+    border-right: 1px solid #2A2F38;
+}
+
+/* Form Elemanları (Inputs, Combos, SpinBox, DateEdit) */
+QLineEdit, QComboBox, QDoubleSpinBox, QSpinBox, QDateEdit {
+    border: 1px solid #2A2F38;
+    border-radius: 6px;
+    padding: 8px 12px;
+    background-color: #15171C;
+    color: #E5E7EB;
+}
+
+QLineEdit:focus, QComboBox:focus, QDoubleSpinBox:focus, QSpinBox:focus, QDateEdit:focus {
+    border: 1px solid #00B5E2; /* Turkuaz Vurgu */
+}
+
+QComboBox::drop-down {
+    border: none;
+}
+
+QComboBox QAbstractItemView {
+    background-color: #1A1D23;
+    color: #E5E7EB;
+    selection-background-color: #2A2F38;
+    border: 1px solid #2A2F38;
+}
+
+/* Butonlar */
+QPushButton {
+    border-radius: 6px;
+    padding: 8px 16px;
+    background-color: #2A2F38;
+    border: 1px solid #2A2F38;
+    color: #E5E7EB;
+    font-weight: 600;
+}
+
+QPushButton:hover {
+    background-color: #353B45;
+}
+
+QPushButton:pressed {
+    background-color: #1F242B;
+}
+
+/* Sekmeler */
+QTabWidget::pane {
+    border: 1px solid #2A2F38;
+    border-radius: 8px;
+    top: -1px;
+}
+
+QTabBar::tab {
+    background: transparent;
+    color: #9CA3AF;
+    padding: 8px 18px;
+    border: none;
+    border-bottom: 2px solid transparent;
+}
+
+QTabBar::tab:selected {
+    color: #E5E7EB;
+    border-bottom: 2px solid #E30A17;
+}
+
+QTabBar::tab:hover {
+    color: #E5E7EB;
+}
+
+/* GroupBox */
+QGroupBox {
+    border: 1px solid #2A2F38;
+    border-radius: 8px;
+    margin-top: 14px;
+    padding: 12px;
+    font-weight: 600;
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    left: 12px;
+    padding: 0 4px;
+    color: #9CA3AF;
+}
+
+/* Menü (sağ tık) */
+QMenu {
+    background-color: #1A1D23;
+    border: 1px solid #2A2F38;
+    color: #E5E7EB;
+}
+
+QMenu::item:selected {
+    background-color: #2A2F38;
+}
+
+/* QDialog Pencereleri */
+QDialog {
+    background-color: #15171C;
+}
+
+/* CheckBox */
+QCheckBox {
+    color: #E5E7EB;
+    spacing: 6px;
+}
+
+/* Kaydırma çubukları */
+QScrollBar:vertical {
+    background: #15171C;
+    width: 10px;
+    margin: 0;
+}
+
+QScrollBar::handle:vertical {
+    background: #2A2F38;
+    border-radius: 5px;
+    min-height: 24px;
+}
+
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    height: 0;
 }

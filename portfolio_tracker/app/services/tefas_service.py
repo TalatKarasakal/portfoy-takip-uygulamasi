@@ -10,50 +10,60 @@ class TefasService:
         self.crawler = Crawler()
         self.max_retries = 3
 
-    def fetch_current_price(self, fund_code: str, force_refresh: bool = False) -> Optional[float]:
-        """Fonun bugünkü veya işlem gören son fiyatını çeker."""
+    def fetch_quote(self, fund_code: str, force_refresh: bool = False) -> Dict[str, Optional[float]]:
+        """Fonun güncel fiyatını ve bir önceki işlem günü fiyatını döndürür.
+
+        Returns:
+            {"price": float | None, "prev_close": float | None}
+        """
+        cache_key = f"TEFAS_QUOTE_{fund_code}"
         if not force_refresh:
-            cached_price = price_cache.get(f"TEFAS_{fund_code}")
-            if cached_price is not None:
-                return float(cached_price)
+            cached = price_cache.get(cache_key)
+            if cached is not None:
+                return cached
 
         # En son tarihli iş gününü bulabilmek için son 7 günü tarıyoruz (Hafta sonu/Tatil sebebiyle)
         end_date = datetime.now()
         start_date = end_date - timedelta(days=7)
-        
+
         attempt = 0
         while attempt < self.max_retries:
             try:
                 # 500ms bekleme, rate limit önlemi
                 time.sleep(0.5)
-                
+
                 start_str = start_date.strftime("%Y-%m-%d")
                 end_str = end_date.strftime("%Y-%m-%d")
-                
+
                 prices_logger.debug(f"Fetching TEFAS fund {fund_code} from {start_str} to {end_str}")
                 df = self.crawler.fetch(start=start_str, end=end_str, name=fund_code, columns=["date", "code", "price"])
-                
+
                 if df is not None and not df.empty:
                     # En güncel tarihi al (df genelde tarihe göre sıralı gelir, yine de sort edelim)
                     df = df.sort_values(by="date", ascending=False)
-                    latest_price = float(df.iloc[0]["price"])
-                    
-                    # Cache'e kaydet
-                    price_cache.set(f"TEFAS_{fund_code}", latest_price)
-                    return latest_price
+                    prices = [float(p) for p in df["price"].tolist()]
+                    price = prices[0]
+                    prev_close = prices[1] if len(prices) >= 2 else price
+                    quote = {"price": price, "prev_close": prev_close}
+                    price_cache.set(cache_key, quote)
+                    return quote
                 else:
                     prices_logger.warning(f"No TEFAS data returned for {fund_code}")
-                    return None
-                    
+                    return {"price": None, "prev_close": None}
+
             except Exception as e:
                 attempt += 1
                 backoff_time = (2 ** attempt)  # 2, 4, 8 saniye...
                 prices_logger.error(f"Error fetching TEFAS {fund_code} (Attempt {attempt}): {e}. Retrying in {backoff_time}s")
                 if attempt >= self.max_retries:
                     prices_logger.error(f"Failed to fetch TEFAS {fund_code} after {self.max_retries} attempts.")
-                    return None
+                    return {"price": None, "prev_close": None}
                 time.sleep(backoff_time)
-        return None
+        return {"price": None, "prev_close": None}
+
+    def fetch_current_price(self, fund_code: str, force_refresh: bool = False) -> Optional[float]:
+        """Fonun bugünkü veya işlem gören son fiyatını çeker."""
+        return self.fetch_quote(fund_code, force_refresh).get("price")
 
     def fetch_historical_prices(self, fund_code: str, start_date: datetime, end_date: datetime) -> List[Dict[str, Any]]:
         """Verilen tarih aralığında geçmiş fiyatları döndürür."""

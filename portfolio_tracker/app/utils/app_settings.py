@@ -16,12 +16,11 @@ from app.utils.logger import app_logger
 # Tüm uygulama ayarlarının varsayılan değerleri (yapay zeka anahtarları dahil).
 DEFAULT_SETTINGS: Dict[str, str] = {
     # Temel ayarlar
-    "theme": "dark",
+    "theme": "system",
     "default_currency": "TRY",
     "refresh_interval_minutes": "15",
     "cost_method": "WAC",
     "notifications_enabled": "1",
-    "language": "tr",
     # Yapay zeka ayarları
     # ai_provider: "none" | "ollama" | "gemini"
     "ai_provider": "none",
