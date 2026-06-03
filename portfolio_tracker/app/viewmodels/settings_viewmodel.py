@@ -3,6 +3,7 @@ from app.database.session import get_session
 from app.models.settings import Settings
 from app.services.import_export_service import ImportExportService
 from app.services.backup_service import BackupService
+from app.utils.app_settings import DEFAULT_SETTINGS
 
 class SettingsViewModel(QObject):
     settings_loaded = Signal(dict)
@@ -10,14 +11,8 @@ class SettingsViewModel(QObject):
     error_occurred = Signal(str)
     success_message = Signal(str)
 
-    default_settings = {
-        "theme": "dark",
-        "default_currency": "TRY",
-        "refresh_interval_minutes": "15",
-        "cost_method": "WAC",
-        "notifications_enabled": "1",
-        "language": "tr"
-    }
+    # Yapay zeka anahtarları dahil tüm varsayılanlar app_settings'te tutulur
+    default_settings = DEFAULT_SETTINGS
 
     def load_settings(self):
         try:

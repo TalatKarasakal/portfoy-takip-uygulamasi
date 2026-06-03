@@ -40,6 +40,7 @@ class MainWindow(QMainWindow):
             ("portfolio", "Portföy", "fa5s.wallet"),
             ("transactions", "İşlemler", "fa5s.exchange-alt"),
             ("analytics", "Analiz", "fa5s.chart-line"),
+            ("assistant", "Asistan", "fa5s.robot"),
             ("alerts", "Uyarılar", "fa5s.bell"),
             ("settings", "Ayarlar", "fa5s.cog"),
         ]
@@ -68,24 +69,32 @@ class MainWindow(QMainWindow):
         from app.views.analytics_view import AnalyticsView
         from app.views.settings_view import SettingsView
         from app.views.alerts_view import AlertsView
-        
+        from app.views.ai_assistant_view import AIAssistantView
+
         from app.viewmodels.portfolio_viewmodel import PortfolioViewModel
         from app.viewmodels.transaction_viewmodel import TransactionViewModel
         from app.viewmodels.analytics_viewmodel import AnalyticsViewModel
         from app.viewmodels.settings_viewmodel import SettingsViewModel
-        
+        from app.viewmodels.ai_viewmodel import AIViewModel
+
         self.portfolio_vm = PortfolioViewModel()
         self.transaction_vm = TransactionViewModel()
         self.analytics_vm = AnalyticsViewModel()
         self.settings_vm = SettingsViewModel()
-        
+        self.ai_vm = AIViewModel()
+
         self.settings_vm.settings_loaded.connect(self.apply_theme)
-        
+
+        # Yapay zeka asistanını güncel portföy verisiyle besle
+        self.portfolio_vm.data_loaded.connect(self.ai_vm.update_portfolio_data)
+        self.portfolio_vm.kpi_updated.connect(self.ai_vm.update_kpi_data)
+
         self.views = {
             "dashboard": DashboardView(self.portfolio_vm),
             "portfolio": PortfolioView(self.portfolio_vm),
             "transactions": TransactionsView(self.transaction_vm),
             "analytics": AnalyticsView(self.analytics_vm, self.portfolio_vm),
+            "assistant": AIAssistantView(self.ai_vm),
             "alerts": AlertsView(),
             "settings": SettingsView(self.settings_vm)
         }
@@ -124,3 +133,6 @@ class MainWindow(QMainWindow):
         if tab_id in self.views:
             idx = self.stacked_widget.indexOf(self.views[tab_id])
             self.stacked_widget.setCurrentIndex(idx)
+            # Asistan sekmesi açıldığında AI durumunu ve varlık listesini tazele
+            if tab_id == "assistant":
+                self.views["assistant"].refresh_state()
