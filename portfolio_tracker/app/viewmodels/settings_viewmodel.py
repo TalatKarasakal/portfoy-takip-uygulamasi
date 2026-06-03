@@ -8,6 +8,7 @@ from app.models.price_history import PriceHistory
 from app.models.portfolio_snapshot import PortfolioSnapshot
 from app.services.import_export_service import ImportExportService
 from app.services.backup_service import BackupService
+from app.utils.app_settings import DEFAULT_SETTINGS
 from app.utils.logger import app_logger
 
 class SettingsViewModel(QObject):
@@ -19,13 +20,8 @@ class SettingsViewModel(QObject):
     data_changed = Signal()                 # import sonrası portföyü tazele
     percentage_import_needed = Signal(str)  # (dosya yolu) — toplam değer sorulmalı
 
-    default_settings = {
-        "theme": "system",
-        "default_currency": "TRY",
-        "refresh_interval_minutes": "15",
-        "cost_method": "WAC",
-        "notifications_enabled": "1",
-    }
+    # Yapay zeka anahtarları dahil tüm varsayılanlar app_settings'te tutulur
+    default_settings = DEFAULT_SETTINGS
 
     def load_settings(self):
         try:

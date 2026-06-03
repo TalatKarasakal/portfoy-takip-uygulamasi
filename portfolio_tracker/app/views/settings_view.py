@@ -1,7 +1,7 @@
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QFormLayout, QComboBox,
                                  QPushButton, QLabel, QGroupBox, QHBoxLayout, QFileDialog,
                                  QMessageBox, QCheckBox, QScrollArea, QDialog, QInputDialog,
-                                 QApplication)
+                                 QApplication, QLineEdit)
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QCursor
 
@@ -86,6 +86,42 @@ class SettingsView(QWidget):
 
         layout.addWidget(group_basic)
 
+        # --- Yapay Zeka Ayarları ---
+        group_ai = QGroupBox("Yapay Zeka")
+        form_ai = QFormLayout(group_ai)
+
+        self.ai_provider_combo = QComboBox()
+        # none: kapalı, ollama: yerel ücretsiz, gemini: ücretsiz katman
+        self.ai_provider_combo.addItems(["none", "ollama", "gemini"])
+        form_ai.addRow("Sağlayıcı:", self.ai_provider_combo)
+
+        self.ai_ollama_url_edit = QLineEdit()
+        self.ai_ollama_url_edit.setPlaceholderText("http://localhost:11434")
+        form_ai.addRow("Ollama Adresi:", self.ai_ollama_url_edit)
+
+        self.ai_ollama_model_edit = QLineEdit()
+        self.ai_ollama_model_edit.setPlaceholderText("llama3.1")
+        form_ai.addRow("Ollama Modeli:", self.ai_ollama_model_edit)
+
+        self.ai_gemini_key_edit = QLineEdit()
+        self.ai_gemini_key_edit.setEchoMode(QLineEdit.Password)
+        self.ai_gemini_key_edit.setPlaceholderText("Gemini API anahtarı")
+        form_ai.addRow("Gemini API Anahtarı:", self.ai_gemini_key_edit)
+
+        self.ai_gemini_model_edit = QLineEdit()
+        self.ai_gemini_model_edit.setPlaceholderText("gemini-1.5-flash")
+        form_ai.addRow("Gemini Modeli:", self.ai_gemini_model_edit)
+
+        ai_hint = QLabel(
+            "Ollama yerelde tamamen ücretsizdir (ollama.com). Gemini'nin ücretsiz "
+            "katmanı için API anahtarı: aistudio.google.com/app/apikey"
+        )
+        ai_hint.setWordWrap(True)
+        ai_hint.setStyleSheet("color: #6B7280; font-size: 11px;")
+        form_ai.addRow(ai_hint)
+
+        layout.addWidget(group_ai)
+
         # --- Veri Yönetimi ---
         group_data = QGroupBox("Veri Yönetimi")
         data_v = QVBoxLayout(group_data)
@@ -149,6 +185,13 @@ class SettingsView(QWidget):
             str(settings.get("notifications_enabled", "1")) in ("1", "True", "true")
         )
 
+        # Yapay zeka ayarları
+        self.ai_provider_combo.setCurrentText(settings.get("ai_provider", "none"))
+        self.ai_ollama_url_edit.setText(settings.get("ai_ollama_url", "http://localhost:11434"))
+        self.ai_ollama_model_edit.setText(settings.get("ai_ollama_model", "llama3.1"))
+        self.ai_gemini_key_edit.setText(settings.get("ai_gemini_api_key", ""))
+        self.ai_gemini_model_edit.setText(settings.get("ai_gemini_model", "gemini-1.5-flash"))
+
     def save_settings(self):
         new_s = {
             "theme": self.theme_combo.currentText(),
@@ -156,6 +199,11 @@ class SettingsView(QWidget):
             "refresh_interval_minutes": self.refresh_combo.currentText(),
             "cost_method": self.cost_method_combo.currentText(),
             "notifications_enabled": "1" if self.notifications_check.isChecked() else "0",
+            "ai_provider": self.ai_provider_combo.currentText(),
+            "ai_ollama_url": self.ai_ollama_url_edit.text().strip() or "http://localhost:11434",
+            "ai_ollama_model": self.ai_ollama_model_edit.text().strip() or "llama3.1",
+            "ai_gemini_api_key": self.ai_gemini_key_edit.text().strip(),
+            "ai_gemini_model": self.ai_gemini_model_edit.text().strip() or "gemini-1.5-flash",
         }
         self.view_model.save_settings(new_s)
 

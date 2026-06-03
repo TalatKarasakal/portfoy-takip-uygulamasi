@@ -1,0 +1,205 @@
+"""LLM sağlayıcı soyutlaması.
+
+İki ücretsiz seçenek desteklenir:
+
+* **Ollama** — Kullanıcının kendi makinesinde çalışan, tamamen ücretsiz ve
+  internet gerektirmeyen yerel modeller (llama3.1, qwen2.5, gemma2 vb.).
+* **Google Gemini** — Ücretsiz katmanı olan bulut tabanlı model. Yalnızca bir
+  API anahtarı gerektirir (https://aistudio.google.com/app/apikey).
+
+Tüm sağlayıcılar `LLMProvider` arayüzünü uygular. Çağrılar `httpx` ile yapılır
+(projede zaten mevcut bir bağımlılık), bu yüzden ek paket gerekmez.
+"""
+
+import json
+from typing import Dict, List, Optional
+
+import httpx
+
+from app.utils.logger import app_logger
+
+# LLM çağrıları yavaş olabileceğinden cömert bir zaman aşımı veriyoruz.
+DEFAULT_TIMEOUT = 120.0
+
+
+class LLMError(Exception):
+    """LLM sağlayıcısıyla iletişimde oluşan hatalar için kullanılır."""
+
+
+class LLMProvider:
+    """Tüm LLM sağlayıcılarının uyguladığı temel arayüz."""
+
+    name: str = "base"
+
+    def is_available(self) -> bool:
+        """Sağlayıcının kullanılabilir olup olmadığını kontrol eder."""
+        raise NotImplementedError
+
+    def chat(self, messages: List[Dict[str, str]], system: Optional[str] = None) -> str:
+        """Mesaj listesiyle (rol/içerik) sohbet tamamlaması yapar.
+
+        Args:
+            messages: ``[{"role": "user"|"assistant", "content": str}, ...]``
+            system: Modelin davranışını yönlendiren sistem talimatı.
+
+        Returns:
+            Modelin ürettiği metin.
+        """
+        raise NotImplementedError
+
+    def complete(self, prompt: str, system: Optional[str] = None) -> str:
+        """Tek bir kullanıcı istemi için kısayol."""
+        return self.chat([{"role": "user", "content": prompt}], system=system)
+
+
+class OllamaProvider(LLMProvider):
+    """Yerel Ollama sunucusuyla konuşan sağlayıcı (ücretsiz, çevrimdışı)."""
+
+    name = "ollama"
+
+    def __init__(
+        self, base_url: str = "http://localhost:11434", model: str = "llama3.1"
+    ) -> None:
+        self.base_url = base_url.rstrip("/")
+        self.model = model
+
+    def is_available(self) -> bool:
+        try:
+            resp = httpx.get(f"{self.base_url}/api/tags", timeout=5.0)
+            return resp.status_code == 200
+        except Exception as e:
+            app_logger.debug(f"Ollama erişilemedi: {e}")
+            return False
+
+    def chat(self, messages: List[Dict[str, str]], system: Optional[str] = None) -> str:
+        payload_messages: List[Dict[str, str]] = []
+        if system:
+            payload_messages.append({"role": "system", "content": system})
+        payload_messages.extend(messages)
+
+        payload = {
+            "model": self.model,
+            "messages": payload_messages,
+            "stream": False,
+        }
+        try:
+            resp = httpx.post(
+                f"{self.base_url}/api/chat", json=payload, timeout=DEFAULT_TIMEOUT
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            return (data.get("message", {}) or {}).get("content", "").strip()
+        except httpx.HTTPStatusError as e:
+            app_logger.error(f"Ollama HTTP hatası: {e}")
+            raise LLMError(
+                f"Ollama modeli '{self.model}' yanıt vermedi. Modelin indirildiğinden "
+                f"emin olun (ör. 'ollama pull {self.model}')."
+            )
+        except Exception as e:
+            app_logger.error(f"Ollama bağlantı hatası: {e}")
+            raise LLMError(
+                "Ollama'ya bağlanılamadı. Ollama'nın çalıştığından emin olun "
+                f"({self.base_url})."
+            )
+
+
+class GeminiProvider(LLMProvider):
+    """Google Gemini ücretsiz katmanını kullanan sağlayıcı."""
+
+    name = "gemini"
+    BASE = "https://generativelanguage.googleapis.com/v1beta/models"
+
+    def __init__(self, api_key: str = "", model: str = "gemini-1.5-flash") -> None:
+        self.api_key = api_key
+        self.model = model
+
+    def is_available(self) -> bool:
+        return bool(self.api_key)
+
+    def chat(self, messages: List[Dict[str, str]], system: Optional[str] = None) -> str:
+        if not self.api_key:
+            raise LLMError("Gemini API anahtarı tanımlı değil. Ayarlar'dan girin.")
+
+        url = f"{self.BASE}/{self.model}:generateContent?key={self.api_key}"
+        contents = []
+        for msg in messages:
+            role = "user" if msg["role"] == "user" else "model"
+            contents.append({"role": role, "parts": [{"text": msg["content"]}]})
+
+        payload: Dict = {"contents": contents}
+        if system:
+            payload["systemInstruction"] = {"parts": [{"text": system}]}
+
+        try:
+            resp = httpx.post(url, json=payload, timeout=DEFAULT_TIMEOUT)
+            resp.raise_for_status()
+            data = resp.json()
+            candidates = data.get("candidates", [])
+            if not candidates:
+                raise LLMError(
+                    "Gemini boş yanıt döndürdü (içerik filtrelenmiş olabilir)."
+                )
+            parts = candidates[0].get("content", {}).get("parts", [])
+            return "".join(p.get("text", "") for p in parts).strip()
+        except httpx.HTTPStatusError as e:
+            detail = ""
+            try:
+                detail = e.response.json().get("error", {}).get("message", "")
+            except Exception:
+                pass
+            app_logger.error(f"Gemini HTTP hatası: {e} {detail}")
+            raise LLMError(f"Gemini isteği başarısız oldu: {detail or e}")
+        except LLMError:
+            raise
+        except Exception as e:
+            app_logger.error(f"Gemini bağlantı hatası: {e}")
+            raise LLMError(f"Gemini'ye bağlanılamadı: {e}")
+
+
+def get_provider(settings: Dict[str, str]) -> Optional[LLMProvider]:
+    """Ayar sözlüğüne göre uygun LLM sağlayıcısını oluşturur.
+
+    Returns:
+        Yapılandırılmış bir ``LLMProvider`` ya da yapay zeka kapalıysa ``None``.
+    """
+    provider = (settings.get("ai_provider") or "none").lower()
+    if provider == "ollama":
+        return OllamaProvider(
+            base_url=settings.get("ai_ollama_url", "http://localhost:11434"),
+            model=settings.get("ai_ollama_model", "llama3.1"),
+        )
+    if provider == "gemini":
+        return GeminiProvider(
+            api_key=settings.get("ai_gemini_api_key", ""),
+            model=settings.get("ai_gemini_model", "gemini-1.5-flash"),
+        )
+    return None
+
+
+def extract_json(text: str) -> Optional[dict]:
+    """Model yanıtından JSON nesnesini ayıklar.
+
+    Modeller bazen JSON'u ```json ... ``` bloğu içinde veya açıklama metniyle
+    birlikte döndürür. Bu yardımcı, metindeki ilk geçerli JSON nesnesini bulur.
+    """
+    if not text:
+        return None
+    cleaned = text.strip()
+    # Markdown kod bloklarını temizle
+    if cleaned.startswith("```"):
+        cleaned = cleaned.strip("`")
+        if cleaned.lower().startswith("json"):
+            cleaned = cleaned[4:]
+    # İlk { ile son } arasını dene
+    start = cleaned.find("{")
+    end = cleaned.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        candidate = cleaned[start : end + 1]
+        try:
+            return json.loads(candidate)
+        except json.JSONDecodeError:
+            pass
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        return None
