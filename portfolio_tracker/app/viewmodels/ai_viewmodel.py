@@ -218,8 +218,12 @@ class AIViewModel(QObject):
     # --- 4) Akıllı risk analizi (deterministik + opsiyonel LLM yorumu) ---
 
     def analyze_risk(self) -> None:
-        """Konsantrasyon ve çeşitlendirme risklerini (LLM'siz) hesaplar."""
-        warnings = analyze_risk(self.portfolio_items)
+        """Konsantrasyon ve çeşitlendirme risklerini (LLM'siz) hesaplar.
+
+        Eşikler kullanıcının yatırımcı profiline göre ayarlanır.
+        """
+        profile = load_settings_dict().get("risk_profile", "balanced")
+        warnings = analyze_risk(self.portfolio_items, profile=profile)
         self.risk_ready.emit(warnings)
 
     # --- 5 & 6) Teknik analiz ve anomali tespiti ---
@@ -277,9 +281,11 @@ class AIViewModel(QObject):
         items = list(self.portfolio_items)
         kpi = dict(self.kpi_data)
 
+        profile = load_settings_dict().get("risk_profile", "balanced")
+
         def task() -> str:
             provider = self._get_provider_or_raise()
-            return advisor.generate_advice(provider, items, kpi, goal=goal)
+            return advisor.generate_advice(provider, items, kpi, goal=goal, profile=profile)
 
         self._run_async("advice", task)
 

@@ -9,6 +9,13 @@ from app.services.import_export_service import PORTFOLIO_EXPORT_COLUMNS
 
 APP_VERSION = "1.0.0"
 
+# Yatırımcı profili: anahtar -> Türkçe etiket
+RISK_PROFILE_LABELS = {
+    "conservative": "Temkinli",
+    "balanced": "Dengeli",
+    "aggressive": "Atak",
+}
+
 
 class ExportColumnsDialog(QDialog):
     """Dışa aktarılacak portföy sütunlarını seçtiren diyalog."""
@@ -83,6 +90,12 @@ class SettingsView(QWidget):
 
         self.notifications_check = QCheckBox("Uyarı bildirimleri açık")
         form_basic.addRow("Bildirimler:", self.notifications_check)
+
+        # Yatırımcı profili (risk eşiklerini ve YZ önerilerini etkiler)
+        self.risk_profile_combo = QComboBox()
+        for key, label in RISK_PROFILE_LABELS.items():
+            self.risk_profile_combo.addItem(label, key)
+        form_basic.addRow("Yatırımcı Profili:", self.risk_profile_combo)
 
         layout.addWidget(group_basic)
 
@@ -203,6 +216,9 @@ class SettingsView(QWidget):
         self.notifications_check.setChecked(
             str(settings.get("notifications_enabled", "1")) in ("1", "True", "true")
         )
+        ri = self.risk_profile_combo.findData(settings.get("risk_profile", "balanced"))
+        if ri >= 0:
+            self.risk_profile_combo.setCurrentIndex(ri)
 
         # Yapay zeka ayarları
         self.ai_provider_combo.setCurrentText(settings.get("ai_provider", "none"))
@@ -220,6 +236,7 @@ class SettingsView(QWidget):
             "refresh_interval_minutes": self.refresh_combo.currentText(),
             "cost_method": self.cost_method_combo.currentText(),
             "notifications_enabled": "1" if self.notifications_check.isChecked() else "0",
+            "risk_profile": self.risk_profile_combo.currentData(),
             "ai_provider": self.ai_provider_combo.currentText(),
             "ai_ollama_url": self.ai_ollama_url_edit.text().strip() or "http://localhost:11434",
             "ai_ollama_model": self.ai_ollama_model_edit.text().strip() or "llama3.1",

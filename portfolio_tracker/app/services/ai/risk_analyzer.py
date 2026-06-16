@@ -8,23 +8,56 @@ bulgular bir LLM'e verilerek doğal dilde yorum üretilebilir.
 
 from typing import Any, Dict, List
 
-# Eşik değerleri (portföy yüzdesi olarak)
+# Varsayılan (Dengeli) eşik değerleri (portföy yüzdesi olarak)
 SINGLE_POSITION_HIGH = 40.0
 SINGLE_POSITION_MEDIUM = 25.0
 ASSET_TYPE_HIGH = 85.0
 MIN_POSITIONS = 4
 
+# Yatırımcı profiline göre eşikler. Temkinli profil daha düşük eşiklerle daha
+# hassas uyarır; Atak profil daha yüksek eşiklerle daha az uyarır.
+PROFILE_THRESHOLDS: Dict[str, Dict[str, float]] = {
+    "conservative": {
+        "single_high": 25.0, "single_medium": 15.0,
+        "type_high": 70.0, "min_positions": 6,
+    },
+    "balanced": {
+        "single_high": SINGLE_POSITION_HIGH, "single_medium": SINGLE_POSITION_MEDIUM,
+        "type_high": ASSET_TYPE_HIGH, "min_positions": MIN_POSITIONS,
+    },
+    "aggressive": {
+        "single_high": 55.0, "single_medium": 40.0,
+        "type_high": 95.0, "min_positions": 3,
+    },
+}
 
-def analyze_risk(portfolio_items: List[Dict[str, Any]]) -> List[Dict[str, str]]:
+PROFILE_LABELS = {
+    "conservative": "Temkinli",
+    "balanced": "Dengeli",
+    "aggressive": "Atak",
+}
+
+
+def analyze_risk(
+    portfolio_items: List[Dict[str, Any]], profile: str = "balanced"
+) -> List[Dict[str, str]]:
     """Portföyü tarayıp risk uyarıları üretir.
 
     Args:
         portfolio_items: ``PortfolioViewModel`` pozisyon sözlükleri.
+        profile: Yatırımcı profili ("conservative"|"balanced"|"aggressive").
+            Eşik değerlerini ayarlar.
 
     Returns:
         ``{"severity": "high"|"medium"|"info", "title": str, "message": str}``
         biçiminde uyarı sözlükleri listesi. Uyarı yoksa boş liste döner.
     """
+    th = PROFILE_THRESHOLDS.get(profile, PROFILE_THRESHOLDS["balanced"])
+    single_high = th["single_high"]
+    single_medium = th["single_medium"]
+    type_high = th["type_high"]
+    min_positions = th["min_positions"]
+
     warnings: List[Dict[str, str]] = []
     if not portfolio_items:
         return warnings
@@ -36,7 +69,7 @@ def analyze_risk(portfolio_items: List[Dict[str, Any]]) -> List[Dict[str, str]]:
     # 1) Tek pozisyon konsantrasyonu
     for item in portfolio_items:
         pct = item.get("current_value", 0) / total_value * 100
-        if pct >= SINGLE_POSITION_HIGH:
+        if pct >= single_high:
             warnings.append(
                 {
                     "severity": "high",
@@ -47,7 +80,7 @@ def analyze_risk(portfolio_items: List[Dict[str, Any]]) -> List[Dict[str, str]]:
                     ),
                 }
             )
-        elif pct >= SINGLE_POSITION_MEDIUM:
+        elif pct >= single_medium:
             warnings.append(
                 {
                     "severity": "medium",
@@ -67,7 +100,7 @@ def analyze_risk(portfolio_items: List[Dict[str, Any]]) -> List[Dict[str, str]]:
         )
     for asset_type, value in type_totals.items():
         pct = value / total_value * 100
-        if pct >= ASSET_TYPE_HIGH and len(type_totals) > 1:
+        if pct >= type_high and len(type_totals) > 1:
             warnings.append(
                 {
                     "severity": "medium",
@@ -80,7 +113,7 @@ def analyze_risk(portfolio_items: List[Dict[str, Any]]) -> List[Dict[str, str]]:
             )
 
     # 3) Yetersiz çeşitlendirme
-    if len(portfolio_items) < MIN_POSITIONS:
+    if len(portfolio_items) < min_positions:
         warnings.append(
             {
                 "severity": "info",

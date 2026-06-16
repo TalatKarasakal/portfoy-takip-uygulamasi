@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional
 
 from app.services.ai.llm_provider import LLMProvider
 from app.services.ai.portfolio_context import build_portfolio_context
-from app.services.ai.risk_analyzer import analyze_risk
+from app.services.ai.risk_analyzer import analyze_risk, PROFILE_LABELS
 
 
 def generate_advice(
@@ -18,6 +18,7 @@ def generate_advice(
     kpi_data: Dict[str, Any],
     goal: str = "",
     indicator_summaries: Optional[Dict[str, str]] = None,
+    profile: str = "balanced",
 ) -> str:
     """Portföy için doğal dilde öneri metni üretir.
 
@@ -32,9 +33,11 @@ def generate_advice(
         LLM tarafından üretilen Türkçe öneri metni.
     """
     context = build_portfolio_context(portfolio_items, kpi_data)
-    risk_warnings = analyze_risk(portfolio_items)
+    risk_warnings = analyze_risk(portfolio_items, profile=profile)
 
     parts: List[str] = [context, ""]
+    parts.append(f"Yatırımcı profili: {PROFILE_LABELS.get(profile, 'Dengeli')}")
+    parts.append("")
 
     if risk_warnings:
         parts.append("=== TESPİT EDİLEN RİSKLER ===")

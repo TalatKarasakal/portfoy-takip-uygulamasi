@@ -21,6 +21,8 @@ DEFAULT_SETTINGS: Dict[str, str] = {
     "refresh_interval_minutes": "15",
     "cost_method": "WAC",
     "notifications_enabled": "1",
+    # Yatırımcı risk profili: "conservative" | "balanced" | "aggressive"
+    "risk_profile": "balanced",
     # Yapay zeka ayarları
     # ai_provider: "none" | "ollama" | "local" | "gemini"
     "ai_provider": "none",

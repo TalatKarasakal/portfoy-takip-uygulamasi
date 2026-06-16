@@ -46,3 +46,25 @@ def test_dengeli_portfoy_az_uyari():
     # Yüksek/orta konsantrasyon ya da çeşitlendirme uyarısı olmamalı
     assert all(w["title"] != "Sınırlı Çeşitlendirme" for w in warnings)
     assert all(w["severity"] != "high" for w in warnings)
+
+
+def test_profil_temkinli_daha_hassas():
+    # 5 eşit pozisyon (%20): Dengeli'de konsantrasyon uyarısı yok,
+    # Temkinli'de %20 >= orta eşik (%15) olduğu için uyarı çıkmalı.
+    items = [_item(f"A{i}", 100) for i in range(5)]
+    balanced = analyze_risk(items, profile="balanced")
+    conservative = analyze_risk(items, profile="conservative")
+    assert all("Konsantrasyon" not in w["title"] for w in balanced)
+    assert any("Konsantrasyon" in w["title"] for w in conservative)
+    # Temkinli min pozisyon 6 -> 5 pozisyon "Sınırlı Çeşitlendirme" verir
+    assert any(w["title"] == "Sınırlı Çeşitlendirme" for w in conservative)
+
+
+def test_profil_atak_daha_toleransli():
+    # THYAO %45: Dengeli'de yüksek (>=40), Atak'ta yüksek değil (<55)
+    items = [_item("THYAO", 450), _item("GARAN", 250),
+             _item("AKBNK", 200), _item("SISE", 100)]
+    balanced = analyze_risk(items, profile="balanced")
+    aggressive = analyze_risk(items, profile="aggressive")
+    assert any(w["severity"] == "high" for w in balanced)
+    assert all(w["severity"] != "high" for w in aggressive)
