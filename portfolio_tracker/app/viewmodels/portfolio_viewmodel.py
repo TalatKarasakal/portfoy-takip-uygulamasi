@@ -44,6 +44,12 @@ class PortfolioLoaderThread(QThread):
                         quote = self.bist_service.fetch_quote(asset.code, self.force_refresh)
                     else:
                         quote = self.tefas_service.fetch_quote(asset.code, self.force_refresh)
+                        # Fon adı henüz çözülmemişse (ad == kod) TEFAS'tan tam adı çek
+                        if not asset.name or asset.name == asset.code:
+                            fund_name = self.tefas_service.fetch_fund_name(asset.code)
+                            if fund_name:
+                                asset.name = fund_name
+                                session.commit()
 
                     current_price = quote.get("price") or 0.0
                     prev_close = quote.get("prev_close")

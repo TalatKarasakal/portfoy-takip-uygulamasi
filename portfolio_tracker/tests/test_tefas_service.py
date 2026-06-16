@@ -27,6 +27,31 @@ def test_fetch_current_price_success(MockCrawler, override_cache):
     assert instance.fetch.called
 
 @patch('app.services.tefas_service.Crawler')
+def test_fetch_fund_name(MockCrawler, override_cache):
+    mock_df = pd.DataFrame([
+        {"date": pd.Timestamp('2024-10-09'), "code": "AFT", "title": "AK PORTFÖY X FONU"},
+        {"date": pd.Timestamp('2024-10-10'), "code": "AFT", "title": "AK PORTFÖY X FONU"},
+    ])
+    instance = MockCrawler.return_value
+    instance.fetch.return_value = mock_df
+
+    with patch('time.sleep', return_value=None):
+        service = TefasService()
+        name = service.fetch_fund_name("AFT")
+
+    assert name == "AK PORTFÖY X FONU"
+
+
+@patch('app.services.tefas_service.Crawler')
+def test_fetch_fund_name_handles_failure(MockCrawler, override_cache):
+    instance = MockCrawler.return_value
+    instance.fetch.side_effect = Exception("network")
+    with patch('time.sleep', return_value=None):
+        service = TefasService()
+        assert service.fetch_fund_name("ZZZ") is None
+
+
+@patch('app.services.tefas_service.Crawler')
 def test_fetch_current_price_retry_failure(MockCrawler, override_cache):
     instance = MockCrawler.return_value
     # Simüle edilmiş exception (örn. ağ hatası)

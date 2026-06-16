@@ -123,7 +123,7 @@ class AssetDialog(QDialog):
         self.input_code = QLineEdit()
         self.input_code.setPlaceholderText("Örn: THYAO veya AFT")
         self.input_name = QLineEdit()
-        self.input_name.setPlaceholderText("Varlık Adı")
+        self.input_name.setPlaceholderText("Varlık Adı (TEFAS fonları için boş bırakılabilir)")
         self.combo_type = QComboBox()
         self.combo_type.addItems(["BIST", "TEFAS"])
 
@@ -270,10 +270,12 @@ class PortfolioView(QWidget):
         dialog = AssetDialog(self)
         if dialog.exec():
             data = dialog.get_data()
-            if data["code"] and data["name"]:
-                self.view_model.add_asset(data["code"], data["name"], data["type"])
+            if data["code"]:
+                # Ad boşsa kod kullanılır; TEFAS fonları için gerçek ad otomatik çekilir
+                name = data["name"] or data["code"]
+                self.view_model.add_asset(data["code"], name, data["type"])
             else:
-                QMessageBox.warning(self, "Hata", "Lütfen Kod ve Ad alanlarını doldurunuz.")
+                QMessageBox.warning(self, "Hata", "Lütfen en az Varlık Kodu girin.")
 
     def show_context_menu(self, pos):
         index = self.table_view.indexAt(pos)

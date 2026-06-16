@@ -10,6 +10,36 @@ class TefasService:
         self.crawler = Crawler()
         self.max_retries = 3
 
+    def fetch_fund_name(self, fund_code: str) -> Optional[str]:
+        """Fonun resmî tam adını (title) TEFAS'tan çeker.
+
+        Sonuç uzun süre geçerli olduğundan kalıcı kabul edilir ve in-memory
+        cache'lenir. Hata durumunda None döner.
+        """
+        cache_key = f"TEFAS_NAME_{fund_code}"
+        cached = price_cache.get(cache_key)
+        if cached is not None:
+            return cached or None
+
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=10)
+        try:
+            time.sleep(0.5)  # rate limit önlemi
+            df = self.crawler.fetch(
+                start=start_date.strftime("%Y-%m-%d"),
+                end=end_date.strftime("%Y-%m-%d"),
+                name=fund_code,
+                columns=["date", "code", "title"],
+            )
+            if df is not None and not df.empty and "title" in df.columns:
+                title = str(df.iloc[-1]["title"]).strip()
+                if title and title.lower() != "nan":
+                    price_cache.set(cache_key, title)
+                    return title
+        except Exception as e:
+            prices_logger.error(f"TEFAS fon adı çekme hatası ({fund_code}): {e}")
+        return None
+
     def fetch_quote(self, fund_code: str, force_refresh: bool = False) -> Dict[str, Optional[float]]:
         """Fonun güncel fiyatını ve bir önceki işlem günü fiyatını döndürür.
 
