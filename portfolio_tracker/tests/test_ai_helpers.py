@@ -55,6 +55,72 @@ def test_get_provider_gemini():
     assert p is not None and p.name == "gemini"
 
 
+def test_get_provider_local():
+    p = get_provider({
+        "ai_provider": "local",
+        "ai_local_url": "http://localhost:8080/v1/",
+        "ai_local_model": "qwen2.5-7b",
+    })
+    assert p is not None and p.name == "local"
+    assert p.base_url == "http://localhost:8080/v1"  # sondaki / temizlenir
+    assert p.model == "qwen2.5-7b"
+
+
+def test_local_provider_chat_parses_openai_response(monkeypatch):
+    """OpenAI-uyumlu yanıt biçiminin doğru ayrıştırıldığını doğrular (ağ yok)."""
+    from app.services.ai import llm_provider as mod
+
+    class FakeResponse:
+        status_code = 200
+
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {
+                "choices": [
+                    {"message": {"role": "assistant", "content": " Merhaba! "}}
+                ]
+            }
+
+    captured = {}
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        captured["url"] = url
+        captured["payload"] = json
+        return FakeResponse()
+
+    monkeypatch.setattr(mod.httpx, "post", fake_post)
+
+    p = mod.OpenAICompatibleProvider(base_url="http://localhost:1234/v1", model="m1")
+    out = p.chat([{"role": "user", "content": "selam"}], system="sys")
+
+    assert out == "Merhaba!"
+    assert captured["url"].endswith("/chat/completions")
+    # Sistem talimatı ilk mesaj olarak eklenir
+    assert captured["payload"]["messages"][0] == {"role": "system", "content": "sys"}
+    assert captured["payload"]["model"] == "m1"
+
+
+def test_local_provider_list_models(monkeypatch):
+    from app.services.ai import llm_provider as mod
+
+    class FakeResponse:
+        status_code = 200
+
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"data": [{"id": "llama-3.1-8b"}, {"id": "qwen2.5"}]}
+
+    monkeypatch.setattr(mod.httpx, "get", lambda *a, **k: FakeResponse())
+
+    p = mod.OpenAICompatibleProvider()
+    assert p.is_available() is True
+    assert p.list_models() == ["llama-3.1-8b", "qwen2.5"]
+
+
 def test_parse_transaction_normalize():
     provider = FakeProvider(
         '{"asset_code": "thyao", "tx_type": "buy", "date": "2024-05-01", '

@@ -91,8 +91,9 @@ class SettingsView(QWidget):
         form_ai = QFormLayout(group_ai)
 
         self.ai_provider_combo = QComboBox()
-        # none: kapalı, ollama: yerel ücretsiz, gemini: ücretsiz katman
-        self.ai_provider_combo.addItems(["none", "ollama", "gemini"])
+        # none: kapalı, ollama: yerel ücretsiz, local: diğer yerel sunucular
+        # (LM Studio, llama.cpp, Jan...), gemini: ücretsiz bulut katmanı
+        self.ai_provider_combo.addItems(["none", "ollama", "local", "gemini"])
         form_ai.addRow("Sağlayıcı:", self.ai_provider_combo)
 
         self.ai_ollama_url_edit = QLineEdit()
@@ -103,6 +104,14 @@ class SettingsView(QWidget):
         self.ai_ollama_model_edit.setPlaceholderText("llama3.1")
         form_ai.addRow("Ollama Modeli:", self.ai_ollama_model_edit)
 
+        self.ai_local_url_edit = QLineEdit()
+        self.ai_local_url_edit.setPlaceholderText("http://localhost:1234/v1")
+        form_ai.addRow("Yerel Sunucu Adresi:", self.ai_local_url_edit)
+
+        self.ai_local_model_edit = QLineEdit()
+        self.ai_local_model_edit.setPlaceholderText("boş bırakılırsa ilk model kullanılır")
+        form_ai.addRow("Yerel Model:", self.ai_local_model_edit)
+
         self.ai_gemini_key_edit = QLineEdit()
         self.ai_gemini_key_edit.setEchoMode(QLineEdit.Password)
         self.ai_gemini_key_edit.setPlaceholderText("Gemini API anahtarı")
@@ -112,9 +121,15 @@ class SettingsView(QWidget):
         self.ai_gemini_model_edit.setPlaceholderText("gemini-1.5-flash")
         form_ai.addRow("Gemini Modeli:", self.ai_gemini_model_edit)
 
+        self.btn_test_ai = QPushButton("Bağlantıyı Sına")
+        self.btn_test_ai.clicked.connect(self.on_test_ai_clicked)
+        form_ai.addRow("", self.btn_test_ai)
+
         ai_hint = QLabel(
-            "Ollama yerelde tamamen ücretsizdir (ollama.com). Gemini'nin ücretsiz "
-            "katmanı için API anahtarı: aistudio.google.com/app/apikey"
+            "Ollama yerelde tamamen ücretsizdir (ollama.com). 'local' seçeneği "
+            "LM Studio, llama.cpp, Jan gibi OpenAI-uyumlu yerel sunucularla "
+            "çalışır. Gemini'nin ücretsiz katmanı için API anahtarı: "
+            "aistudio.google.com/app/apikey"
         )
         ai_hint.setWordWrap(True)
         ai_hint.setStyleSheet("color: #6B7280; font-size: 11px;")
@@ -189,6 +204,8 @@ class SettingsView(QWidget):
         self.ai_provider_combo.setCurrentText(settings.get("ai_provider", "none"))
         self.ai_ollama_url_edit.setText(settings.get("ai_ollama_url", "http://localhost:11434"))
         self.ai_ollama_model_edit.setText(settings.get("ai_ollama_model", "llama3.1"))
+        self.ai_local_url_edit.setText(settings.get("ai_local_url", "http://localhost:1234/v1"))
+        self.ai_local_model_edit.setText(settings.get("ai_local_model", ""))
         self.ai_gemini_key_edit.setText(settings.get("ai_gemini_api_key", ""))
         self.ai_gemini_model_edit.setText(settings.get("ai_gemini_model", "gemini-1.5-flash"))
 
@@ -202,10 +219,74 @@ class SettingsView(QWidget):
             "ai_provider": self.ai_provider_combo.currentText(),
             "ai_ollama_url": self.ai_ollama_url_edit.text().strip() or "http://localhost:11434",
             "ai_ollama_model": self.ai_ollama_model_edit.text().strip() or "llama3.1",
+            "ai_local_url": self.ai_local_url_edit.text().strip() or "http://localhost:1234/v1",
+            "ai_local_model": self.ai_local_model_edit.text().strip(),
             "ai_gemini_api_key": self.ai_gemini_key_edit.text().strip(),
             "ai_gemini_model": self.ai_gemini_model_edit.text().strip() or "gemini-1.5-flash",
         }
         self.view_model.save_settings(new_s)
+
+    def _current_ai_form_settings(self) -> dict:
+        """Formdaki (henüz kaydedilmemiş olabilecek) yapay zeka ayarlarını döndürür."""
+        return {
+            "ai_provider": self.ai_provider_combo.currentText(),
+            "ai_ollama_url": self.ai_ollama_url_edit.text().strip() or "http://localhost:11434",
+            "ai_ollama_model": self.ai_ollama_model_edit.text().strip() or "llama3.1",
+            "ai_local_url": self.ai_local_url_edit.text().strip() or "http://localhost:1234/v1",
+            "ai_local_model": self.ai_local_model_edit.text().strip(),
+            "ai_local_api_key": "",
+            "ai_gemini_api_key": self.ai_gemini_key_edit.text().strip(),
+            "ai_gemini_model": self.ai_gemini_model_edit.text().strip() or "gemini-1.5-flash",
+        }
+
+    def on_test_ai_clicked(self):
+        """Seçili sağlayıcıya bağlantıyı dener; varsa model listesini gösterir.
+
+        Formdaki güncel değerlerle test eder, böylece kullanıcı kaydetmeden
+        önce yapılandırmayı doğrulayabilir.
+        """
+        from app.services.ai.llm_provider import get_provider
+
+        provider = get_provider(self._current_ai_form_settings())
+        if provider is None:
+            QMessageBox.information(
+                self, "Yapay Zeka",
+                "Sağlayıcı 'none' seçili. Önce ollama, local veya gemini seçin."
+            )
+            return
+
+        QApplication.setOverrideCursor(QCursor(Qt.WaitCursor))
+        try:
+            available = provider.is_available()
+            models = provider.list_models() if hasattr(provider, "list_models") else []
+        finally:
+            QApplication.restoreOverrideCursor()
+
+        if available:
+            msg = f"'{provider.name}' sağlayıcısına bağlantı başarılı."
+            if models:
+                shown = ", ".join(models[:10])
+                more = f" (+{len(models) - 10} model daha)" if len(models) > 10 else ""
+                msg += f"\n\nYüklü modeller: {shown}{more}"
+            elif provider.name in ("ollama", "local"):
+                msg += (
+                    "\n\nAncak yüklü model görünmüyor. Bir model indirin "
+                    "(örn. 'ollama pull llama3.1')."
+                )
+            QMessageBox.information(self, "Bağlantı Testi", msg)
+        else:
+            tips = {
+                "ollama": "Ollama'nın çalıştığından emin olun (uygulamayı açın veya "
+                          "'ollama serve' komutunu çalıştırın).",
+                "local": "LM Studio / llama.cpp / Jan sunucunuzun açık ve adresin "
+                         "doğru olduğundan emin olun.",
+                "gemini": "API anahtarını girdiğinizden emin olun.",
+            }
+            QMessageBox.warning(
+                self, "Bağlantı Testi",
+                f"'{provider.name}' sağlayıcısına ulaşılamadı.\n\n"
+                + tips.get(provider.name, "")
+            )
 
     def on_backup_clicked(self):
         self.view_model.create_backup()

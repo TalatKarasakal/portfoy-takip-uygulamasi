@@ -22,11 +22,15 @@ DEFAULT_SETTINGS: Dict[str, str] = {
     "cost_method": "WAC",
     "notifications_enabled": "1",
     # Yapay zeka ayarları
-    # ai_provider: "none" | "ollama" | "gemini"
+    # ai_provider: "none" | "ollama" | "local" | "gemini"
     "ai_provider": "none",
     # Ollama (yerel, tamamen ücretsiz) ayarları
     "ai_ollama_url": "http://localhost:11434",
     "ai_ollama_model": "llama3.1",
+    # OpenAI-uyumlu yerel sunucu (LM Studio, llama.cpp, Jan, vLLM vb.) ayarları
+    "ai_local_url": "http://localhost:1234/v1",
+    "ai_local_model": "",
+    "ai_local_api_key": "",
     # Google Gemini (ücretsiz katman, API anahtarı gerektirir) ayarları
     "ai_gemini_api_key": "",
     "ai_gemini_model": "gemini-1.5-flash",

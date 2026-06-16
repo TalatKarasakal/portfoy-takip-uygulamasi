@@ -71,6 +71,17 @@ class OllamaProvider(LLMProvider):
             app_logger.debug(f"Ollama erişilemedi: {e}")
             return False
 
+    def list_models(self) -> List[str]:
+        """Ollama'da indirilmiş modellerin adlarını döndürür (hata halinde boş)."""
+        try:
+            resp = httpx.get(f"{self.base_url}/api/tags", timeout=5.0)
+            resp.raise_for_status()
+            data = resp.json()
+            return [m.get("name", "") for m in data.get("models", []) if m.get("name")]
+        except Exception as e:
+            app_logger.debug(f"Ollama model listesi alınamadı: {e}")
+            return []
+
     def chat(self, messages: List[Dict[str, str]], system: Optional[str] = None) -> str:
         payload_messages: List[Dict[str, str]] = []
         if system:
@@ -100,6 +111,104 @@ class OllamaProvider(LLMProvider):
             raise LLMError(
                 "Ollama'ya bağlanılamadı. Ollama'nın çalıştığından emin olun "
                 f"({self.base_url})."
+            )
+
+
+class OpenAICompatibleProvider(LLMProvider):
+    """OpenAI API uyumlu yerel sunucularla konuşan sağlayıcı.
+
+    LM Studio, llama.cpp server, Jan, vLLM, GPT4All, text-generation-webui gibi
+    araçların tamamı ``/v1/chat/completions`` standardını sunar. Bu sağlayıcı
+    sayesinde kullanıcı Ollama dışında hangi yerel yapay zekayı kurarsa kursun
+    uygulama onunla çalışabilir.
+    """
+
+    name = "local"
+
+    def __init__(
+        self,
+        base_url: str = "http://localhost:1234/v1",
+        model: str = "",
+        api_key: str = "",
+    ) -> None:
+        self.base_url = base_url.rstrip("/")
+        self.model = model
+        self.api_key = api_key  # Yerel sunucular çoğunlukla anahtar istemez
+
+    def _headers(self) -> Dict[str, str]:
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+        return headers
+
+    def is_available(self) -> bool:
+        try:
+            resp = httpx.get(
+                f"{self.base_url}/models", headers=self._headers(), timeout=5.0
+            )
+            return resp.status_code == 200
+        except Exception as e:
+            app_logger.debug(f"Yerel LLM sunucusuna erişilemedi: {e}")
+            return False
+
+    def list_models(self) -> List[str]:
+        """Sunucuda yüklü modellerin adlarını döndürür (hata halinde boş)."""
+        try:
+            resp = httpx.get(
+                f"{self.base_url}/models", headers=self._headers(), timeout=5.0
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            return [m.get("id", "") for m in data.get("data", []) if m.get("id")]
+        except Exception as e:
+            app_logger.debug(f"Yerel LLM model listesi alınamadı: {e}")
+            return []
+
+    def chat(self, messages: List[Dict[str, str]], system: Optional[str] = None) -> str:
+        payload_messages: List[Dict[str, str]] = []
+        if system:
+            payload_messages.append({"role": "system", "content": system})
+        payload_messages.extend(messages)
+
+        model = self.model
+        if not model:
+            # Model belirtilmemişse sunucudaki ilk modeli kullan
+            models = self.list_models()
+            if models:
+                model = models[0]
+            else:
+                raise LLMError(
+                    "Yerel sunucuda yüklü model bulunamadı. Sunucunuzda bir model "
+                    "yükleyin veya Ayarlar'dan model adını girin."
+                )
+
+        payload = {"model": model, "messages": payload_messages, "stream": False}
+        try:
+            resp = httpx.post(
+                f"{self.base_url}/chat/completions",
+                json=payload,
+                headers=self._headers(),
+                timeout=DEFAULT_TIMEOUT,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            choices = data.get("choices", [])
+            if not choices:
+                raise LLMError("Yerel model boş yanıt döndürdü.")
+            return (choices[0].get("message", {}) or {}).get("content", "").strip()
+        except httpx.HTTPStatusError as e:
+            app_logger.error(f"Yerel LLM HTTP hatası: {e}")
+            raise LLMError(
+                f"Yerel model '{model}' yanıt vermedi (HTTP {e.response.status_code}). "
+                "Sunucuda modelin yüklü olduğundan emin olun."
+            )
+        except LLMError:
+            raise
+        except Exception as e:
+            app_logger.error(f"Yerel LLM bağlantı hatası: {e}")
+            raise LLMError(
+                f"Yerel yapay zeka sunucusuna bağlanılamadı ({self.base_url}). "
+                "LM Studio / llama.cpp / Jan gibi sunucunuzun çalıştığından emin olun."
             )
 
 
@@ -167,6 +276,12 @@ def get_provider(settings: Dict[str, str]) -> Optional[LLMProvider]:
         return OllamaProvider(
             base_url=settings.get("ai_ollama_url", "http://localhost:11434"),
             model=settings.get("ai_ollama_model", "llama3.1"),
+        )
+    if provider == "local":
+        return OpenAICompatibleProvider(
+            base_url=settings.get("ai_local_url", "http://localhost:1234/v1"),
+            model=settings.get("ai_local_model", ""),
+            api_key=settings.get("ai_local_api_key", ""),
         )
     if provider == "gemini":
         return GeminiProvider(
