@@ -8,6 +8,7 @@ from app.models.price_history import PriceHistory
 from app.models.portfolio_snapshot import PortfolioSnapshot
 from app.services.import_export_service import ImportExportService
 from app.services.backup_service import BackupService
+from app.services.report_service import export_cashflow_excel
 from app.utils.app_settings import DEFAULT_SETTINGS
 from app.utils.logger import app_logger
 
@@ -91,6 +92,17 @@ class SettingsViewModel(QObject):
                 self.error_occurred.emit("Yüzdelik içeri aktarma başarısız oldu.")
         except Exception as e:
             self.error_occurred.emit(f"Yüzdelik içeri aktarma hatası: {str(e)}")
+
+    def export_cashflow_report(self, file_path: str):
+        try:
+            with get_session() as session:
+                ok = export_cashflow_excel(session, file_path)
+            if ok:
+                self.success_message.emit("Aylık nakit akışı raporu oluşturuldu.")
+            else:
+                self.error_occurred.emit("Rapor için işlem kaydı bulunamadı.")
+        except Exception as e:
+            self.error_occurred.emit(f"Rapor hatası: {str(e)}")
 
     def create_backup(self):
         try:

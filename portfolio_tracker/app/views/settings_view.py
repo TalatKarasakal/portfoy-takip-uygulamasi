@@ -156,6 +156,10 @@ class SettingsView(QWidget):
             data_layout.addWidget(b)
         data_v.addLayout(data_layout)
 
+        self.btn_cashflow = QPushButton("Aylık Nakit Akışı Raporu (Excel)")
+        self.btn_cashflow.clicked.connect(self.on_cashflow_clicked)
+        data_v.addWidget(self.btn_cashflow)
+
         self.btn_delete_all = QPushButton("Tüm Veriyi Sil")
         self.btn_delete_all.setStyleSheet(
             "QPushButton { color: #DC2626; font-weight: bold; }"
@@ -334,6 +338,13 @@ class SettingsView(QWidget):
             self.view_model.import_percentage(path, total)
         finally:
             QApplication.restoreOverrideCursor()
+
+    def on_cashflow_clicked(self):
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Aylık Nakit Akışı Raporu", "nakit_akisi.xlsx", "Excel (*.xlsx)"
+        )
+        if path:
+            self.view_model.export_cashflow_report(path)
 
     def on_delete_all_clicked(self):
         confirm = QMessageBox.warning(
