@@ -102,6 +102,50 @@ def test_local_provider_chat_parses_openai_response(monkeypatch):
     assert captured["payload"]["model"] == "m1"
 
 
+def test_vision_normalize_holdings():
+    from app.services.ai.vision_import import normalize_holdings
+    data = {"holdings": [
+        {"code": "thyao", "type": "bist", "quantity": "100", "avg_cost": "280,5"},
+        {"code": "AFT", "quantity": 50, "avg_cost": 12.3},   # tür yok -> sezgi TEFAS
+        {"type": "BIST"},                                     # kod yok -> atlanır
+    ]}
+    out = normalize_holdings(data)
+    assert len(out) == 2
+    assert out[0]["code"] == "THYAO" and out[0]["type"] == "BIST"
+    assert out[0]["quantity"] == 100.0
+    assert out[1]["code"] == "AFT" and out[1]["type"] == "TEFAS"  # 3 harf -> TEFAS
+
+
+def test_vision_extract_holdings_uses_provider(monkeypatch):
+    from app.services.ai import vision_import
+
+    class VisionProvider(FakeProvider):
+        def supports_vision(self):
+            return True
+
+        def analyze_image(self, image_bytes, mime_type, prompt, system=None):
+            return self._response
+
+    provider = VisionProvider('{"holdings": [{"code": "GARAN", "type": "BIST", "quantity": 10, "avg_cost": 100}]}')
+    out = vision_import.extract_holdings(provider, b"fakebytes", "image/png")
+    assert out == [{"code": "GARAN", "type": "BIST", "quantity": 10.0, "avg_cost": 100.0}]
+
+
+def test_vision_guess_mime():
+    from app.services.ai.vision_import import guess_mime
+    assert guess_mime("/x/portfoy.PNG") == "image/png"
+    assert guess_mime("/x/a.jpeg") == "image/jpeg"
+    assert guess_mime("/x/a.unknown") == "image/png"
+
+
+def test_text_provider_rejects_image():
+    from app.services.ai.llm_provider import LLMError
+    p = FakeProvider("x")
+    import pytest
+    with pytest.raises(LLMError):
+        p.analyze_image(b"x", "image/png", "prompt")
+
+
 def test_local_provider_list_models(monkeypatch):
     from app.services.ai import llm_provider as mod
 

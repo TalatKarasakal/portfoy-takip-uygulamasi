@@ -104,6 +104,8 @@ class MainWindow(QMainWindow):
         # Yapay zeka asistanını güncel portföy verisiyle besle
         self.portfolio_vm.data_loaded.connect(self.ai_vm.update_portfolio_data)
         self.portfolio_vm.kpi_updated.connect(self.ai_vm.update_kpi_data)
+        # Görüntüden içe aktarma sonrası portföyü yenile
+        self.ai_vm.holdings_imported.connect(lambda _msg: self.portfolio_vm.load_data())
 
         # Otomatik yenileme zamanlayıcısı (view'lar kurulmadan önce hazır olmalı;
         # ayar sinyalleri erken tetiklenirse hata vermesin)

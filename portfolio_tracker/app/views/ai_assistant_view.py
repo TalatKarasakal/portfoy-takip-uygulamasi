@@ -11,15 +11,20 @@ Tek bir sekmeli arayüzde tüm yapay zeka özelliklerini sunar:
 from typing import Any, Dict, List
 
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QComboBox,
     QDialog,
     QDialogButtonBox,
     QDoubleSpinBox,
+    QFileDialog,
     QFormLayout,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QLineEdit,
     QPushButton,
+    QTableWidget,
+    QTableWidgetItem,
     QTabWidget,
     QTextBrowser,
     QVBoxLayout,
@@ -72,6 +77,7 @@ class AIAssistantView(QWidget):
         self.tabs.addTab(self._build_technical_tab(), "Teknik Analiz")
         self.tabs.addTab(self._build_news_tab(), "Haber Analizi")
         self.tabs.addTab(self._build_nl_tab(), "Doğal Dil İşlem")
+        self.tabs.addTab(self._build_vision_tab(), "Fotoğraftan Aktar")
 
         self._connect_signals()
         self.refresh_state()
@@ -198,6 +204,36 @@ class AIAssistantView(QWidget):
         layout.addWidget(self.nl_display, stretch=1)
         return widget
 
+    def _build_vision_tab(self) -> QWidget:
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+
+        layout.addWidget(QLabel(
+            "Portföy ekran görüntünü/fotoğrafını seç; yapay zeka varlıkları "
+            "çıkarsın. Çıkan listeyi düzenleyip onaylayabilirsin."
+        ))
+
+        row = QHBoxLayout()
+        self.btn_pick_image = QPushButton("Fotoğraf Seç...")
+        self.btn_pick_image.clicked.connect(self._on_pick_image)
+        self.vision_path_label = QLabel("Henüz dosya seçilmedi.")
+        self.vision_path_label.setStyleSheet("color: #6B7280;")
+        row.addWidget(self.btn_pick_image)
+        row.addWidget(self.vision_path_label, stretch=1)
+        layout.addLayout(row)
+
+        self.vision_table = QTableWidget(0, 4)
+        self.vision_table.setHorizontalHeaderLabels(["Kod", "Tür", "Adet", "Ort. Maliyet"])
+        self.vision_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.vision_table.setEditTriggers(QAbstractItemView.AllEditTriggers)
+        layout.addWidget(self.vision_table, stretch=1)
+
+        self.btn_import_holdings = QPushButton("Listeyi İçe Aktar")
+        self.btn_import_holdings.clicked.connect(self._on_import_holdings)
+        self.btn_import_holdings.setEnabled(False)
+        layout.addWidget(self.btn_import_holdings)
+        return widget
+
     # ------------------------------------------------------------------
     # Sinyal bağlantıları
     # ------------------------------------------------------------------
@@ -211,6 +247,8 @@ class AIAssistantView(QWidget):
         self.vm.transaction_saved.connect(self._on_transaction_saved)
         self.vm.sentiment_ready.connect(self._on_sentiment_ready)
         self.vm.analysis_ready.connect(self._on_analysis_ready)
+        self.vm.holdings_extracted.connect(self._on_holdings_extracted)
+        self.vm.holdings_imported.connect(self._on_holdings_imported)
         self.vm.error_occurred.connect(self._on_error)
         self.vm.busy_changed.connect(self._on_busy_changed)
 
@@ -391,6 +429,69 @@ class AIAssistantView(QWidget):
         if not text:
             return
         self._guarded(lambda: self.vm.parse_transaction_text(text))
+
+    # --- Görüntüden aktarım ---
+
+    def _on_pick_image(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Portföy Görüntüsü Seç", "",
+            "Görüntü (*.png *.jpg *.jpeg *.webp *.bmp *.gif)"
+        )
+        if not path:
+            return
+        self.vision_path_label.setText(path)
+        self.vision_table.setRowCount(0)
+        self.btn_import_holdings.setEnabled(False)
+        self.status_label.setText("Görüntü analiz ediliyor...")
+        self._guarded(lambda: self.vm.import_from_image(path))
+
+    def _on_holdings_extracted(self, holdings: List[Dict[str, Any]]) -> None:
+        self.vision_table.setRowCount(0)
+        for h in holdings:
+            r = self.vision_table.rowCount()
+            self.vision_table.insertRow(r)
+            self.vision_table.setItem(r, 0, QTableWidgetItem(str(h.get("code", ""))))
+            self.vision_table.setItem(r, 1, QTableWidgetItem(str(h.get("type", "BIST"))))
+            self.vision_table.setItem(r, 2, QTableWidgetItem(str(h.get("quantity", 0))))
+            self.vision_table.setItem(r, 3, QTableWidgetItem(str(h.get("avg_cost", 0))))
+        has_rows = self.vision_table.rowCount() > 0
+        self.btn_import_holdings.setEnabled(has_rows)
+        self.status_label.setText(
+            f"{self.vision_table.rowCount()} varlık bulundu. Düzenleyip içe aktarabilirsin."
+            if has_rows else "Görüntüde varlık bulunamadı."
+        )
+
+    def _on_import_holdings(self) -> None:
+        holdings = []
+        for r in range(self.vision_table.rowCount()):
+            def _cell(c):
+                item = self.vision_table.item(r, c)
+                return item.text().strip() if item else ""
+
+            def _num(c):
+                try:
+                    return float(_cell(c).replace(",", "."))
+                except ValueError:
+                    return 0.0
+
+            code = _cell(0).upper()
+            if not code:
+                continue
+            a_type = _cell(1).upper()
+            holdings.append({
+                "code": code,
+                "type": "TEFAS" if a_type == "TEFAS" else "BIST",
+                "quantity": _num(2),
+                "avg_cost": _num(3),
+            })
+        if holdings:
+            self.vm.save_imported_holdings(holdings)
+
+    def _on_holdings_imported(self, message: str) -> None:
+        self.status_label.setText(message)
+        self.vision_table.setRowCount(0)
+        self.btn_import_holdings.setEnabled(False)
+        self._populate_asset_combos()
 
     def _on_error(self, message: str) -> None:
         self.status_label.setText(f"Hata: {message}")

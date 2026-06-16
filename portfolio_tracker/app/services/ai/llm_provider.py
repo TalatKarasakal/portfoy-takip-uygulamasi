@@ -11,6 +11,7 @@ Tüm sağlayıcılar `LLMProvider` arayüzünü uygular. Çağrılar `httpx` ile
 (projede zaten mevcut bir bağımlılık), bu yüzden ek paket gerekmez.
 """
 
+import base64
 import json
 from typing import Dict, List, Optional
 
@@ -50,6 +51,28 @@ class LLMProvider:
     def complete(self, prompt: str, system: Optional[str] = None) -> str:
         """Tek bir kullanıcı istemi için kısayol."""
         return self.chat([{"role": "user", "content": prompt}], system=system)
+
+    def supports_vision(self) -> bool:
+        """Sağlayıcının görüntü (multimodal) desteği olup olmadığını bildirir."""
+        return False
+
+    def analyze_image(
+        self,
+        image_bytes: bytes,
+        mime_type: str,
+        prompt: str,
+        system: Optional[str] = None,
+    ) -> str:
+        """Bir görüntü + metin istemiyle multimodal tamamlama yapar.
+
+        Görüntü destekleyen sağlayıcılar bunu uygular. Desteklemeyenler
+        ``LLMError`` fırlatır.
+        """
+        raise LLMError(
+            f"'{self.name}' sağlayıcısı görüntü analizini desteklemiyor. "
+            "Görüntü için Gemini ya da yerelde bir vision modeli (ör. llava, "
+            "qwen2-vl) kullanın."
+        )
 
 
 class OllamaProvider(LLMProvider):
@@ -111,6 +134,30 @@ class OllamaProvider(LLMProvider):
             raise LLMError(
                 "Ollama'ya bağlanılamadı. Ollama'nın çalıştığından emin olun "
                 f"({self.base_url})."
+            )
+
+    def supports_vision(self) -> bool:
+        return True  # Vision modeli (llava, qwen2-vl...) yüklüyse çalışır
+
+    def analyze_image(self, image_bytes, mime_type, prompt, system=None):
+        b64 = base64.b64encode(image_bytes).decode("ascii")
+        messages = []
+        if system:
+            messages.append({"role": "system", "content": system})
+        messages.append({"role": "user", "content": prompt, "images": [b64]})
+        payload = {"model": self.model, "messages": messages, "stream": False}
+        try:
+            resp = httpx.post(
+                f"{self.base_url}/api/chat", json=payload, timeout=DEFAULT_TIMEOUT
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            return (data.get("message", {}) or {}).get("content", "").strip()
+        except Exception as e:
+            app_logger.error(f"Ollama görüntü analizi hatası: {e}")
+            raise LLMError(
+                f"Ollama görüntü analizi başarısız. '{self.model}' bir vision "
+                "modeli mi? (ör. 'ollama pull llava')."
             )
 
 
@@ -211,6 +258,45 @@ class OpenAICompatibleProvider(LLMProvider):
                 "LM Studio / llama.cpp / Jan gibi sunucunuzun çalıştığından emin olun."
             )
 
+    def supports_vision(self) -> bool:
+        return True  # Sunucuda bir vision modeli yüklüyse çalışır
+
+    def analyze_image(self, image_bytes, mime_type, prompt, system=None):
+        b64 = base64.b64encode(image_bytes).decode("ascii")
+        model = self.model or (self.list_models() or [""])[0]
+        if not model:
+            raise LLMError("Yerel sunucuda model bulunamadı.")
+        messages = []
+        if system:
+            messages.append({"role": "system", "content": system})
+        messages.append({
+            "role": "user",
+            "content": [
+                {"type": "text", "text": prompt},
+                {"type": "image_url",
+                 "image_url": {"url": f"data:{mime_type};base64,{b64}"}},
+            ],
+        })
+        payload = {"model": model, "messages": messages, "stream": False}
+        try:
+            resp = httpx.post(
+                f"{self.base_url}/chat/completions",
+                json=payload, headers=self._headers(), timeout=DEFAULT_TIMEOUT,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            choices = data.get("choices", [])
+            if not choices:
+                raise LLMError("Yerel model boş yanıt döndürdü.")
+            return (choices[0].get("message", {}) or {}).get("content", "").strip()
+        except LLMError:
+            raise
+        except Exception as e:
+            app_logger.error(f"Yerel LLM görüntü analizi hatası: {e}")
+            raise LLMError(
+                f"Yerel görüntü analizi başarısız. '{model}' bir vision modeli mi?"
+            )
+
 
 class GeminiProvider(LLMProvider):
     """Google Gemini ücretsiz katmanını kullanan sağlayıcı."""
@@ -263,6 +349,40 @@ class GeminiProvider(LLMProvider):
         except Exception as e:
             app_logger.error(f"Gemini bağlantı hatası: {e}")
             raise LLMError(f"Gemini'ye bağlanılamadı: {e}")
+
+    def supports_vision(self) -> bool:
+        return True  # gemini-1.5-flash/pro multimodaldir
+
+    def analyze_image(self, image_bytes, mime_type, prompt, system=None):
+        if not self.api_key:
+            raise LLMError("Gemini API anahtarı tanımlı değil. Ayarlar'dan girin.")
+        b64 = base64.b64encode(image_bytes).decode("ascii")
+        url = f"{self.BASE}/{self.model}:generateContent?key={self.api_key}"
+        payload: Dict = {
+            "contents": [{
+                "role": "user",
+                "parts": [
+                    {"text": prompt},
+                    {"inline_data": {"mime_type": mime_type, "data": b64}},
+                ],
+            }]
+        }
+        if system:
+            payload["systemInstruction"] = {"parts": [{"text": system}]}
+        try:
+            resp = httpx.post(url, json=payload, timeout=DEFAULT_TIMEOUT)
+            resp.raise_for_status()
+            data = resp.json()
+            candidates = data.get("candidates", [])
+            if not candidates:
+                raise LLMError("Gemini boş yanıt döndürdü (içerik filtrelenmiş olabilir).")
+            parts = candidates[0].get("content", {}).get("parts", [])
+            return "".join(p.get("text", "") for p in parts).strip()
+        except LLMError:
+            raise
+        except Exception as e:
+            app_logger.error(f"Gemini görüntü analizi hatası: {e}")
+            raise LLMError(f"Gemini görüntü analizi başarısız: {e}")
 
 
 def get_provider(settings: Dict[str, str]) -> Optional[LLMProvider]:

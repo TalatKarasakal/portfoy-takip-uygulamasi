@@ -12,7 +12,7 @@ from PySide6.QtCore import QObject, QThread, Signal
 
 from app.database.session import get_session
 from app.models.asset import Asset, AssetType
-from app.services.ai import advisor, news_sentiment, nl_transaction
+from app.services.ai import advisor, news_sentiment, nl_transaction, vision_import
 from app.services.ai.llm_provider import get_provider
 from app.services.ai.portfolio_context import SYSTEM_PROMPT, build_portfolio_context
 from app.services.ai.risk_analyzer import analyze_risk
@@ -55,6 +55,8 @@ class AIViewModel(QObject):
     transaction_saved = Signal(str)
     sentiment_ready = Signal(dict)
     analysis_ready = Signal(dict)
+    holdings_extracted = Signal(list)
+    holdings_imported = Signal(str)
     error_occurred = Signal(str)
     busy_changed = Signal(bool)
 
@@ -122,6 +124,8 @@ class AIViewModel(QObject):
             self.sentiment_ready.emit(result)
         elif tag == "analysis":
             self.analysis_ready.emit(result)
+        elif tag == "vision":
+            self.holdings_extracted.emit(result)
 
     def _on_error(self, tag: str, message: str) -> None:
         self.error_occurred.emit(message)
@@ -288,6 +292,63 @@ class AIViewModel(QObject):
             return advisor.generate_advice(provider, items, kpi, goal=goal, profile=profile)
 
         self._run_async("advice", task)
+
+    # --- 9) Görüntüden portföy aktarımı (vision) ---
+
+    def import_from_image(self, image_path: str) -> None:
+        """Bir görüntüden varlıkları çıkarır (arka planda). Kaydetmez."""
+
+        def task() -> List[Dict[str, Any]]:
+            provider = self._get_provider_or_raise()
+            if not provider.supports_vision():
+                from app.services.ai.llm_provider import LLMError
+                raise LLMError(
+                    f"'{provider.name}' görüntü desteklemiyor. Gemini veya yerelde "
+                    "bir vision modeli (llava, qwen2-vl) kullanın."
+                )
+            with open(image_path, "rb") as f:
+                image_bytes = f.read()
+            mime = vision_import.guess_mime(image_path)
+            return vision_import.extract_holdings(provider, image_bytes, mime)
+
+        self._run_async("vision", task)
+
+    def save_imported_holdings(self, holdings: List[Dict[str, Any]]) -> None:
+        """Onaylanan varlık listesini varlık + tek BUY işlemi olarak kaydeder."""
+        try:
+            from app.models.transaction import Transaction, TransactionType
+
+            count = 0
+            with get_session() as session:
+                for h in holdings:
+                    code = str(h.get("code", "")).strip().upper()
+                    if not code:
+                        continue
+                    a_type = AssetType.BIST if h.get("type") == "BIST" else AssetType.TEFAS
+                    asset = session.query(Asset).filter_by(code=code).first()
+                    if asset is None:
+                        asset = Asset(code=code, name=code, asset_type=a_type)
+                        session.add(asset)
+                        session.flush()
+                    qty = float(h.get("quantity", 0) or 0)
+                    price = float(h.get("avg_cost", 0) or 0)
+                    if qty > 0 and price > 0:
+                        session.add(Transaction(
+                            asset_id=asset.id,
+                            transaction_type=TransactionType.BUY,
+                            date=datetime.date.today(),
+                            quantity=qty,
+                            unit_price=price,
+                            commission=0,
+                            tax=0,
+                            note="Görüntüden içe aktarıldı",
+                        ))
+                    count += 1
+                session.commit()
+            self.holdings_imported.emit(f"{count} varlık görüntüden içe aktarıldı.")
+        except Exception as e:
+            app_logger.error(f"Görüntüden içe aktarma kaydı hatası: {e}")
+            self.error_occurred.emit(f"Kaydetme hatası: {e}")
 
     def get_asset_choices(self) -> List[Dict[str, str]]:
         """Analiz/haber için seçilebilir varlıkları döndürür."""

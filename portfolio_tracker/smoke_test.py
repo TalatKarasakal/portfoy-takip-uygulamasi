@@ -85,7 +85,8 @@ def main():
     win.show()
 
     # Tüm sekmeleri gez
-    for tab in ("dashboard", "portfolio", "transactions", "analytics", "alerts", "settings"):
+    for tab in ("dashboard", "portfolio", "transactions", "analytics",
+                "assistant", "alerts", "settings"):
         win.switch_tab(tab)
         app.processEvents()
 
