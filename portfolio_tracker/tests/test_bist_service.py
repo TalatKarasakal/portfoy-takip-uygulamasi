@@ -1,7 +1,10 @@
-import pytest
 from unittest.mock import MagicMock, patch
+
+import pytest
+
 from app.services.bist_service import BistService
 from app.utils.cache import price_cache
+
 
 @pytest.fixture
 def override_cache():
@@ -16,7 +19,7 @@ def test_fetch_current_price_success(mock_fetch_quote, MockTicker, override_cach
     mock_history = MagicMock()
     mock_history.empty = False
     mock_history.__getitem__.return_value.tolist.return_value = [15.0, 15.5]
-    
+
     instance = MockTicker.return_value
     instance.history.return_value = mock_history
 
@@ -39,7 +42,7 @@ def test_fetch_current_price_suffix(mock_fetch_quote, MockTicker, override_cache
     mock_history = MagicMock()
     mock_history.empty = False
     mock_history.__getitem__.return_value.tolist.return_value = [10.0]
-    
+
     instance = MockTicker.return_value
     instance.history.return_value = mock_history
 
@@ -66,7 +69,7 @@ def test_fetch_current_price_from_cache(override_cache):
 def test_fetch_current_price_empty_history(mock_fetch_quote, MockTicker, override_cache):
     mock_history = MagicMock()
     mock_history.empty = True
-    
+
     instance = MockTicker.return_value
     instance.history.return_value = mock_history
     mock_fetch_quote.return_value = {"price": None, "prev_close": None}

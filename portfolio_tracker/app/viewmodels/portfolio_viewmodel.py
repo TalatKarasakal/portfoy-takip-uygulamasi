@@ -1,15 +1,17 @@
-from PySide6.QtCore import QObject, Signal, Slot, QThread
-from sqlalchemy.orm import joinedload
 from concurrent.futures import ThreadPoolExecutor
+
+from PySide6.QtCore import QObject, QThread, Signal, Slot
+from sqlalchemy.orm import joinedload
+
 from app.database.session import get_session
 from app.models.asset import Asset, AssetType
 from app.models.settings import Settings
 from app.services.bist_service import BistService
-from app.services.tefas_service import TefasService
 from app.services.currency_service import CurrencyService
 from app.services.portfolio_service import PortfolioService
-from app.services.snapshot_service import SnapshotService
 from app.services.price_history_service import PriceHistoryService
+from app.services.snapshot_service import SnapshotService
+from app.services.tefas_service import TefasService
 from app.utils.display import display
 from app.utils.logger import app_logger
 
@@ -326,9 +328,10 @@ class PortfolioViewModel(QObject):
     def get_recent_transactions(self, limit=5):
         try:
             with get_session() as session:
-                from app.models.transaction import Transaction, TransactionType
                 from sqlalchemy import desc
                 from sqlalchemy.orm import joinedload
+
+                from app.models.transaction import Transaction, TransactionType
                 txs = (
                     session.query(Transaction)
                     .options(joinedload(Transaction.asset))

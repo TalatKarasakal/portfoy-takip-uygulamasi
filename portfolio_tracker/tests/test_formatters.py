@@ -1,5 +1,5 @@
-import pytest
 from app.utils.formatters import format_currency, format_percent
+
 
 def test_format_currency_positive():
     assert format_currency(1234.56) == "1.234,56 ₺"

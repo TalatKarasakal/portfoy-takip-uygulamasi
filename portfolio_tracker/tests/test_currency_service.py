@@ -1,7 +1,10 @@
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
+
 from app.services.currency_service import CurrencyService
 from app.utils.cache import price_cache
+
 
 @pytest.fixture
 def override_cache():

@@ -1,9 +1,7 @@
-import os
-import shutil
-from datetime import datetime
 import pytest
 
 from app.services.backup_service import BackupService
+
 
 @pytest.fixture
 def mock_env(tmp_path, monkeypatch):
