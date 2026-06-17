@@ -38,12 +38,18 @@ class SettingsViewModel(QObject):
     def save_settings(self, new_settings: dict):
         try:
             with get_session() as session:
-                for k, v in new_settings.items():
-                    s = session.query(Settings).filter_by(key=k).first()
-                    if s:
-                        s.value = str(v)
-                    else:
-                        session.add(Settings(key=k, value=str(v)))
+                if new_settings:
+                    existing_settings = (
+                        session.query(Settings)
+                        .filter(Settings.key.in_(new_settings.keys()))
+                        .all()
+                    )
+                    existing_dict = {s.key: s for s in existing_settings}
+                    for k, v in new_settings.items():
+                        if k in existing_dict:
+                            existing_dict[k].value = str(v)
+                        else:
+                            session.add(Settings(key=k, value=str(v)))
                 session.commit()
             self.settings_saved.emit()
             self.load_settings()

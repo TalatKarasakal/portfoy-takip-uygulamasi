@@ -1,7 +1,7 @@
 import pandas as pd
 import datetime
 from typing import Any, Dict, List, Optional
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from app.models.asset import Asset, AssetType
 from app.models.transaction import Transaction, TransactionType
 from app.utils.logger import app_logger
@@ -59,7 +59,7 @@ class ImportExportService:
 
         # İşlemler (her zaman tam)
         tx_data = []
-        for tx in session.query(Transaction).all():
+        for tx in session.query(Transaction).options(joinedload(Transaction.asset)).all():
             tx_data.append({
                 "Tarih": tx.date,
                 "Varlık Kodu": tx.asset.code if tx.asset else "",
@@ -222,20 +222,53 @@ class ImportExportService:
             return False
 
     @staticmethod
+    def _ensure_assets_exist(session: Session, codes_and_names: dict) -> dict:
+        """Varlıkları toplu olarak sorgular ve olmayanları toplu olarak oluşturur (N+1 query optimizasyonu).
+        codes_and_names: dict of {code: name}
+        Returns a dict of {code: Asset}
+        """
+        if not codes_and_names:
+            return {}
+
+        codes = list(codes_and_names.keys())
+        existing_assets = session.query(Asset).filter(Asset.code.in_(codes)).all()
+        asset_map = {a.code: a for a in existing_assets}
+
+        new_assets = []
+        for code, name in codes_and_names.items():
+            if code not in asset_map:
+                a_type = AssetType.BIST if len(code) >= 4 and len(code) <= 5 else AssetType.TEFAS
+                asset = Asset(code=code, name=name, asset_type=a_type)
+                new_assets.append(asset)
+                asset_map[code] = asset
+
+        if new_assets:
+            session.add_all(new_assets)
+            session.flush() # To get IDs for new assets
+
+        return asset_map
+
+    @staticmethod
     def _process_full_transaction_history(session: Session, df: pd.DataFrame) -> bool:
-        for index, row in df.iterrows():
-            code = str(row.get("Kod", row.get("kod"))).strip().upper()
-            if pd.isna(code) or not code:
+        records = df.to_dict('records')
+        codes_and_names = {}
+        valid_records = []
+
+        for row in records:
+            code = str(row.get("Kod", row.get("kod", ""))).strip().upper()
+            if pd.isna(code) or not code or code == 'NAN':
                 continue
-                
-            asset = session.query(Asset).filter_by(code=code).first()
-            if not asset:
-                # Otomatik varlık oluşturma (Türünü belirleme heuristic)
-                a_type = AssetType.BIST if len(code) == 5 else AssetType.TEFAS
-                asset = Asset(code=code, name=code, asset_type=a_type)
-                session.add(asset)
-                session.flush()
-                
+            codes_and_names[code] = code  # varsayılan ad kodun kendisi
+            valid_records.append((code, row))
+
+        if not valid_records:
+            return True
+
+        asset_map = ImportExportService._ensure_assets_exist(session, codes_and_names)
+
+        transactions = []
+        for code, row in valid_records:
+            asset = asset_map[code]
             ttype_str = str(row.get("Tür", row.get("tür", ""))).strip().upper()
             ttype = TransactionType.BUY if ttype_str in ["BUY", "AL", "ALIM"] else TransactionType.SELL
             
@@ -248,25 +281,35 @@ class ImportExportService:
                 commission=row.get("Komisyon", 0),
                 tax=row.get("Vergi", 0)
             )
-            session.add(tx)
+            transactions.append(tx)
+
+        if transactions:
+            session.add_all(transactions)
         session.commit()
         return True
 
     @staticmethod
     def _process_quantity_cost(session: Session, df: pd.DataFrame) -> bool:
         """Adet ve Ortalama Maliyet verilirse, tek bir sanal BUY işlemi olarak eklenecek."""
-        for index, row in df.iterrows():
-            code = str(row.get("Kod", row.get("kod"))).strip().upper()
-            if pd.isna(code) or not code:
-                continue
-                
-            asset = session.query(Asset).filter_by(code=code).first()
-            if not asset:
-                a_type = AssetType.BIST if len(code) == 5 else AssetType.TEFAS
-                asset = Asset(code=code, name=code, asset_type=a_type)
-                session.add(asset)
-                session.flush()
+        records = df.to_dict('records')
+        codes_and_names = {}
+        valid_records = []
 
+        for row in records:
+            code = str(row.get("Kod", row.get("kod", ""))).strip().upper()
+            if pd.isna(code) or not code or code == 'NAN':
+                continue
+            codes_and_names[code] = code
+            valid_records.append((code, row))
+
+        if not valid_records:
+            return True
+
+        asset_map = ImportExportService._ensure_assets_exist(session, codes_and_names)
+
+        transactions = []
+        for code, row in valid_records:
+            asset = asset_map[code]
             tx = Transaction(
                 asset_id=asset.id,
                 transaction_type=TransactionType.BUY,
@@ -277,44 +320,58 @@ class ImportExportService:
                 tax=0,
                 note="Excel Import - Toplu Maliyet"
             )
-            session.add(tx)
+            transactions.append(tx)
+
+        if transactions:
+            session.add_all(transactions)
         session.commit()
         return True
 
     @staticmethod
     def _process_assets_only(session: Session, df: pd.DataFrame) -> bool:
         """Sadece varlık listesi (Kod, Ad) ve isteğe bağlı Tutar ekler."""
-        for index, row in df.iterrows():
-            code = None
-            name = None
-            tutar = 0.0
-            
-            for col in df.columns:
-                c_lower = str(col).lower()
-                if "kod" in c_lower:
-                    code = str(row[col]).strip().upper()
-                elif "ad" in c_lower and "soyad" not in c_lower:
-                    name = str(row[col]).strip()
-                elif "tutar" in c_lower or "maliyet" in c_lower:
-                    try:
-                        tutar = float(row[col])
-                    except:
-                        pass
-                        
+        kod_col, ad_col, tutar_col = None, None, None
+        for col in df.columns:
+            c_lower = str(col).lower()
+            if "kod" in c_lower:
+                kod_col = col
+            elif "ad" in c_lower and "soyad" not in c_lower:
+                ad_col = col
+            elif "tutar" in c_lower or "maliyet" in c_lower:
+                tutar_col = col
+
+        records = df.to_dict('records')
+        codes_and_names = {}
+        valid_records = []
+
+        for row in records:
+            code = str(row[kod_col]).strip().upper() if kod_col and pd.notna(row.get(kod_col)) else None
             if not code or pd.isna(code) or code == 'NAN':
                 continue
                 
+            name = str(row[ad_col]).strip() if ad_col and pd.notna(row.get(ad_col)) else None
             if not name or pd.isna(name) or name == 'NAN':
                 name = code
                 
-            asset = session.query(Asset).filter_by(code=code).first()
-            if not asset:
-                # BIST genellikle 5 hane (Örn: THYAO), Fonlar genelde 3 hane (Örn: AFT)
-                a_type = AssetType.BIST if len(code) >= 4 and len(code) <= 5 else AssetType.TEFAS
-                asset = Asset(code=code, name=name, asset_type=a_type)
-                session.add(asset)
-                session.flush() # ID'yi alabilmek için
-                
+            tutar = 0.0
+            if tutar_col and pd.notna(row.get(tutar_col)):
+                try:
+                    tutar = float(row[tutar_col])
+                except ValueError:
+                    pass
+
+            codes_and_names[code] = name
+            valid_records.append((code, tutar))
+
+        if not valid_records:
+            return True
+
+        asset_map = ImportExportService._ensure_assets_exist(session, codes_and_names)
+
+        transactions = []
+        for code, tutar in valid_records:
+            asset = asset_map[code]
+
             # Eğer Tutar doldurulmuşsa bunu bir BUY işlemi olarak atalım (Miktar 1 birim)
             if tutar > 0 and not pd.isna(tutar):
                 tx = Transaction(
@@ -327,7 +384,9 @@ class ImportExportService:
                     tax=0,
                     note="Excel Import - Tutar (Toplu)"
                 )
-                session.add(tx)
+                transactions.append(tx)
                 
+        if transactions:
+            session.add_all(transactions)
         session.commit()
         return True
