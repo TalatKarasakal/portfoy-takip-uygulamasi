@@ -1,7 +1,66 @@
-# portfoy-takip-uygulaması
+# Portföy Takip Uygulaması
 
-Kişisel yatırım portföyü (BIST hisseleri ve TEFAS fonları) takip ve analiz
-masaüstü uygulaması. Python + PySide6 (MVVM) ile geliştirilmiştir.
+Kişisel BIST hisse senetleri ve TEFAS yatırım fonları portföylerini izlemek, analiz etmek ve işlem geçmişiyle birlikte değerlendirmek için geliştirilen yerel masaüstü uygulamasıdır. Uygulama sunucu bileşeni olmadan çalışır; portföy verileri kullanıcının makinesindeki SQLite veritabanında tutulur.
+
+## Öne Çıkan Analitik Özellikler
+
+- XIRR, Sharpe oranı, maksimum düşüş (Max Drawdown) ve volatilite gibi performans metrikleri.
+- WAC, FIFO ve LIFO maliyet bazı yöntemleriyle gerçekleşmiş ve gerçekleşmemiş kar/zarar takibi.
+- PyQtGraph tabanlı tarihsel fiyat, portföy değeri ve karşılaştırmalı performans grafikleri.
+- BIST hisse senetleri ve TEFAS fonları için güncel fiyat ve geçmiş veri takibi.
+- Yerel işlem geçmişi üzerinden portföy dağılımı, maliyet, getiri ve risk analizi.
+
+## Teknoloji Yığını
+
+- Python 3.11+
+- PySide6 (Qt6)
+- SQLAlchemy 2.x
+- SQLite
+- PyQtGraph
+- httpx
+
+PySide6, LGPL lisansı altında dağıtılır. Uygulamanın dağıtımında bu lisansın yeniden bağlantı ve bildirim koşulları dikkate alınmalıdır.
+
+## Veri Kaynakları
+
+- `tefas-crawler`: TEFAS yatırım fonu verileri
+- `yfinance`: BIST hisse senedi verileri (`.IS` uzantılı semboller)
+- TCMB XML: Günlük USD/TRY kuru
+
+## Mimari
+
+Uygulama MVVM mimarisiyle yapılandırılmıştır. View katmanı PySide6 arayüz bileşenlerinden, ViewModel katmanı UI durumu ve bağlama mantığından, Model katmanı ise SQLAlchemy ORM varlıklarından sorumludur.
+
+## Kurulum
+
+```bash
+cd portfolio_tracker
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+Windows PowerShell için sanal ortam aktivasyonu:
+
+```powershell
+cd portfolio_tracker
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+```
+
+## Çalıştırma
+
+Uygulamanın kaynak koddaki giriş noktası `portfolio_tracker/main.py` dosyasıdır.
+
+```bash
+cd portfolio_tracker
+python main.py
+```
+
+## Paketleme
+
+Paketleme süreci PyInstaller tabanlıdır. Dağıtım hedefleri macOS için `.dmg`, Windows için `.exe` artefaktlarıdır; mevcut PyInstaller yapılandırması `portfolio_tracker/portfolio_tracker.spec` dosyasında bulunur.
 
 ## Yapay Zeka Özellikleri
 
