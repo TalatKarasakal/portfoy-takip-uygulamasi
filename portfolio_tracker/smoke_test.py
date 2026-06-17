@@ -13,6 +13,7 @@ from PySide6.QtWidgets import QApplication, QMessageBox
 
 # --- Ağ ve modal diyalogları etkisizleştir ---
 from app.viewmodels.portfolio_viewmodel import PortfolioViewModel
+
 PortfolioViewModel.load_data = lambda self, *a, **k: None  # type: ignore
 
 QMessageBox.warning = staticmethod(lambda *a, **k: QMessageBox.Ok)
@@ -21,21 +22,23 @@ QMessageBox.question = staticmethod(lambda *a, **k: QMessageBox.No)
 
 # Benchmark ağ çağrısını örnek veriyle değiştir
 import datetime as _dt
+
 from app.services.benchmark_service import BenchmarkService
+
 BenchmarkService.fetch_series = staticmethod(lambda *a, **k: {
     "BIST 100": [(_dt.date(2024, 1, 1), 9000.0), (_dt.date(2024, 2, 1), 9500.0)],
     "USD/TRY": [(_dt.date(2024, 1, 1), 32.0), (_dt.date(2024, 2, 1), 33.0)],
     "Gram Altın": [(_dt.date(2024, 1, 1), 2000.0), (_dt.date(2024, 2, 1), 2100.0)],
 })
 
+import datetime
+
 from app.database.engine import init_db
+from app.views.alerts_view import AddAlertDialog
 from app.views.main_window import MainWindow
 from app.views.portfolio_view import AssetDialog
-from app.views.transactions_view import AddTransactionDialog
-from app.views.alerts_view import AddAlertDialog
 from app.views.settings_view import ExportColumnsDialog
-
-import datetime
+from app.views.transactions_view import AddTransactionDialog
 
 
 def sample_items():

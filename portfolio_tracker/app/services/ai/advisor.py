@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional
 
 from app.services.ai.llm_provider import LLMProvider
 from app.services.ai.portfolio_context import build_portfolio_context
-from app.services.ai.risk_analyzer import analyze_risk, PROFILE_LABELS
+from app.services.ai.risk_analyzer import PROFILE_LABELS, analyze_risk
 
 
 def generate_advice(

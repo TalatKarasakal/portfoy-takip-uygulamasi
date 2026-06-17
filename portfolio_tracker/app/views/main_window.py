@@ -1,9 +1,18 @@
-from PySide6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-                                 QPushButton, QStackedWidget, QLabel, QApplication)
-from PySide6.QtCore import Qt, QSize, QTimer
-import qtawesome as qta
 import os
 import sys
+
+import qtawesome as qta
+from PySide6.QtCore import QSize, Qt, QTimer
+from PySide6.QtWidgets import (
+    QApplication,
+    QHBoxLayout,
+    QLabel,
+    QMainWindow,
+    QPushButton,
+    QStackedWidget,
+    QVBoxLayout,
+    QWidget,
+)
 
 
 class MainWindow(QMainWindow):
@@ -72,20 +81,19 @@ class MainWindow(QMainWindow):
         self.stacked_widget.setObjectName("main_stack")
         main_layout.addWidget(self.stacked_widget)
 
-        from app.views.dashboard_view import DashboardView
-        from app.views.portfolio_view import PortfolioView
-        from app.views.transactions_view import TransactionsView
-        from app.views.analytics_view import AnalyticsView
-        from app.views.settings_view import SettingsView
-        from app.views.alerts_view import AlertsView
-        from app.views.ai_assistant_view import AIAssistantView
-
-        from app.viewmodels.portfolio_viewmodel import PortfolioViewModel
-        from app.viewmodels.transaction_viewmodel import TransactionViewModel
-        from app.viewmodels.analytics_viewmodel import AnalyticsViewModel
-        from app.viewmodels.settings_viewmodel import SettingsViewModel
         from app.viewmodels.ai_viewmodel import AIViewModel
         from app.viewmodels.alerts_viewmodel import AlertsViewModel
+        from app.viewmodels.analytics_viewmodel import AnalyticsViewModel
+        from app.viewmodels.portfolio_viewmodel import PortfolioViewModel
+        from app.viewmodels.settings_viewmodel import SettingsViewModel
+        from app.viewmodels.transaction_viewmodel import TransactionViewModel
+        from app.views.ai_assistant_view import AIAssistantView
+        from app.views.alerts_view import AlertsView
+        from app.views.analytics_view import AnalyticsView
+        from app.views.dashboard_view import DashboardView
+        from app.views.portfolio_view import PortfolioView
+        from app.views.settings_view import SettingsView
+        from app.views.transactions_view import TransactionsView
 
         self.portfolio_vm = PortfolioViewModel()
         self.transaction_vm = TransactionViewModel()

@@ -1,8 +1,11 @@
-import pytest
+from unittest.mock import patch
+
 import pandas as pd
-from unittest.mock import MagicMock, patch
+import pytest
+
 from app.services.tefas_service import TefasService
 from app.utils.cache import price_cache
+
 
 @pytest.fixture
 def override_cache():
@@ -22,7 +25,7 @@ def test_fetch_current_price_success(MockCrawler, override_cache):
     service = TefasService()
     # Cache disabled via bypass
     price = service.fetch_current_price("AFT", force_refresh=True)
-    
+
     assert price == 10.5
     assert instance.fetch.called
 
@@ -59,7 +62,7 @@ def test_fetch_current_price_retry_failure(MockCrawler, override_cache):
 
     service = TefasService()
     service.max_retries = 2
-    
+
     with patch('time.sleep', return_value=None):
         price = service.fetch_current_price("AFT", force_refresh=True)
 

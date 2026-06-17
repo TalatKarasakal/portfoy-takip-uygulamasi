@@ -1,9 +1,23 @@
-from PySide6.QtWidgets import (QWidget, QVBoxLayout, QFormLayout, QComboBox,
-                                 QPushButton, QLabel, QGroupBox, QHBoxLayout, QFileDialog,
-                                 QMessageBox, QCheckBox, QScrollArea, QDialog, QInputDialog,
-                                 QApplication, QLineEdit)
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QCursor
+from PySide6.QtWidgets import (
+    QApplication,
+    QCheckBox,
+    QComboBox,
+    QDialog,
+    QFileDialog,
+    QFormLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QInputDialog,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QScrollArea,
+    QVBoxLayout,
+    QWidget,
+)
 
 from app.services.import_export_service import PORTFOLIO_EXPORT_COLUMNS
 

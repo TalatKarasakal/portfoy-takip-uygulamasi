@@ -6,9 +6,8 @@ Dosyalar yoksa sistem fontuna düşülür (sessiz).
 """
 
 import os
-from typing import Optional
 
-from PySide6.QtGui import QFontDatabase, QFont
+from PySide6.QtGui import QFont, QFontDatabase
 
 from app.config import ROOT_DIR
 from app.utils.logger import app_logger

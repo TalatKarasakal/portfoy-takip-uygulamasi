@@ -1,9 +1,12 @@
 import time
-from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional
+
 from tefas import Crawler
-from app.utils.logger import prices_logger
+
 from app.utils.cache import price_cache
+from app.utils.logger import prices_logger
+
 
 class TefasService:
     def __init__(self):
@@ -100,9 +103,9 @@ class TefasService:
         try:
             start_str = start_date.strftime("%Y-%m-%d")
             end_str = end_date.strftime("%Y-%m-%d")
-            
+
             df = self.crawler.fetch(start=start_str, end=end_str, name=fund_code, columns=["date", "code", "price"])
-            
+
             if df is not None and not df.empty:
                 # pandas datetime objesini string/date formatına çevir
                 df['date'] = df['date'].dt.date

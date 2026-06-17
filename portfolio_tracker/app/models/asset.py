@@ -1,8 +1,11 @@
 import enum
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Enum, DateTime
+
+from sqlalchemy import Column, DateTime, Enum, Integer, String
 from sqlalchemy.orm import relationship
+
 from app.database.base import Base
+
 
 class AssetType(enum.Enum):
     BIST = "BIST"

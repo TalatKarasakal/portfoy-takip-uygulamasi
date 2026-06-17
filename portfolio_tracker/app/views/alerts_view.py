@@ -1,11 +1,22 @@
-from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTableWidget,
-                                 QTableWidgetItem, QPushButton, QLabel, QDialog,
-                                 QFormLayout, QComboBox, QDoubleSpinBox, QMessageBox,
-                                 QHeaderView, QAbstractItemView)
 from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (
+    QAbstractItemView,
+    QComboBox,
+    QDialog,
+    QDoubleSpinBox,
+    QFormLayout,
+    QHBoxLayout,
+    QHeaderView,
+    QLabel,
+    QMessageBox,
+    QPushButton,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
+    QWidget,
+)
 
 from app.viewmodels.alerts_viewmodel import ALERT_TYPE_LABELS
-from app.models.alert import AlertType
 
 
 class AddAlertDialog(QDialog):

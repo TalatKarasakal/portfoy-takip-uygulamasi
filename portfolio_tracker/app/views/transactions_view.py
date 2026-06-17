@@ -1,9 +1,23 @@
-from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTableView,
-                                 QPushButton, QLineEdit, QComboBox, QHeaderView, QLabel,
-                                 QMessageBox, QDialog, QFormLayout, QDoubleSpinBox, QDateEdit, QMenu)
-from PySide6.QtCore import Qt, QAbstractTableModel, QModelIndex, QDate
+from PySide6.QtCore import QAbstractTableModel, QDate, QModelIndex, Qt
 from PySide6.QtGui import QColor
-from app.utils.formatters import format_currency
+from PySide6.QtWidgets import (
+    QComboBox,
+    QDateEdit,
+    QDialog,
+    QDoubleSpinBox,
+    QFormLayout,
+    QHBoxLayout,
+    QHeaderView,
+    QLabel,
+    QLineEdit,
+    QMenu,
+    QMessageBox,
+    QPushButton,
+    QTableView,
+    QVBoxLayout,
+    QWidget,
+)
+
 from app.utils.display import display
 from app.views.widgets.table_filter import TableFilterProxyModel
 

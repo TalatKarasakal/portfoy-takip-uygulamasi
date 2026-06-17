@@ -1,9 +1,9 @@
 import datetime
 import time
 
-from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel
-from PySide6.QtCore import Qt, QThread, Signal
 import pyqtgraph as pg
+from PySide6.QtCore import Qt, QThread, Signal
+from PySide6.QtWidgets import QDialog, QLabel, QVBoxLayout
 
 from app.config import COLORS
 

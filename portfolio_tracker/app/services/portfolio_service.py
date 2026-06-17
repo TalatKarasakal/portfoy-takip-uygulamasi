@@ -1,10 +1,9 @@
 import datetime
 import math
-from typing import List, Dict, Any, Tuple
 from collections import deque
+from typing import Any, Dict, List, Tuple
+
 from app.models.transaction import Transaction, TransactionType
-from app.models.asset import Asset
-from app.utils.logger import app_logger
 
 # Yıllıklaştırma için varsayılan işlem günü sayısı
 TRADING_DAYS_PER_YEAR = 252
@@ -28,10 +27,10 @@ class PortfolioService:
 
         # Tarihe göre sırala
         txs = sorted(transactions, key=lambda x: x.date)
-        
+
         remaining_quantity = 0.0
         realized_pnl = 0.0
-        
+
         if method == "WAC":
             # Weighted Average Cost
             total_invested = 0.0
@@ -122,7 +121,7 @@ class PortfolioService:
         unrealized_pnl = 0.0
         if remaining_quantity > 0 and current_price > 0:
             unrealized_pnl = (current_price - average_cost) * remaining_quantity
-            
+
         return {
             "remaining_quantity": remaining_quantity,
             "average_cost": average_cost,
@@ -213,10 +212,10 @@ class PortfolioService:
         """
         if not cash_flows or len(cash_flows) < 2:
             return 0.0
-            
+
         cash_flows = sorted(cash_flows, key=lambda x: x[0])
         t0 = cash_flows[0][0]
-        
+
         def xnpv(rate: float) -> float:
             if rate <= -1.0:
                 return float('inf')
@@ -233,18 +232,18 @@ class PortfolioService:
                 npv = xnpv(guess)
                 if abs(npv) < 1e-5:
                     return guess
-                
+
                 # Derivasyon d(xnpv)/dx
                 d_npv = 0.0
                 for date, amount in cash_flows:
                     days = (date - t0).days
                     d_npv -= (days / 365.0) * amount / ((1.0 + guess) ** ((days / 365.0) + 1.0))
-                
+
                 if d_npv == 0:
                     break
-                
+
                 guess = guess - npv / d_npv
             except Exception:
                 break
-                
+
         return guess

@@ -1,5 +1,7 @@
-from sqlalchemy import Column, Integer, Date, Numeric
+from sqlalchemy import Column, Date, Integer, Numeric
+
 from app.database.base import Base
+
 
 class PortfolioSnapshot(Base):
     __tablename__ = "portfolio_snapshots"

@@ -1,14 +1,27 @@
-from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTableView,
-                                 QPushButton, QLineEdit, QComboBox, QHeaderView, QLabel,
-                                 QMessageBox, QDialog, QFormLayout, QMenu)
-from PySide6.QtCore import Qt, QAbstractTableModel, QModelIndex
-from PySide6.QtGui import QColor
 import qtawesome as qta
-from app.utils.formatters import format_currency, format_percent
+from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt
+from PySide6.QtGui import QColor
+from PySide6.QtWidgets import (
+    QComboBox,
+    QDialog,
+    QFormLayout,
+    QHBoxLayout,
+    QHeaderView,
+    QLabel,
+    QLineEdit,
+    QMenu,
+    QMessageBox,
+    QPushButton,
+    QTableView,
+    QVBoxLayout,
+    QWidget,
+)
+
 from app.utils.display import display
+from app.utils.formatters import format_percent
 from app.views.transactions_view import AddTransactionDialog
-from app.views.widgets.table_filter import TableFilterProxyModel
 from app.views.widgets.asset_chart_dialog import AssetChartDialog
+from app.views.widgets.table_filter import TableFilterProxyModel
 
 PROFIT_COLOR = QColor("#10B981")
 LOSS_COLOR = QColor("#DC2626")
