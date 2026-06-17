@@ -60,7 +60,7 @@ python main.py
 
 ## Paketleme
 
-Paketleme süreci PyInstaller tabanlıdır. Dağıtım hedefleri macOS için `.dmg`, Windows için `.exe` artefaktlarıdır; mevcut PyInstaller yapılandırması `portfolio_tracker/portfolio_tracker.spec` dosyasında bulunur.
+Dağıtım hedefleri macOS için `.dmg`, Windows için `.exe` artefaktlarıdır. Derleme ve paketleme çıktıları ile bunlara ait geçici yapılandırma dosyaları repoda tutulmaz.
 
 ## Yapay Zeka Özellikleri
 
