@@ -1,4 +1,6 @@
 from PySide6.QtCore import QObject, Signal, Slot, QThread
+from sqlalchemy.orm import joinedload
+from concurrent.futures import ThreadPoolExecutor
 from app.database.session import get_session
 from app.models.asset import Asset, AssetType
 from app.models.settings import Settings
@@ -27,7 +29,7 @@ class PortfolioLoaderThread(QThread):
     def run(self):
         try:
             with get_session() as session:
-                assets = session.query(Asset).all()
+                assets = session.query(Asset).options(joinedload(Asset.transactions)).all()
                 portfolio_items = []
 
                 total_value_try = 0.0
@@ -39,11 +41,26 @@ class PortfolioLoaderThread(QThread):
                 failed_codes = []
                 stale_codes = []
 
+                def fetch_asset_quote(a):
+                    try:
+                        if a.asset_type == AssetType.BIST:
+                            q = self.bist_service.fetch_quote(a.code, self.force_refresh)
+                        else:
+                            q = self.tefas_service.fetch_quote(a.code, self.force_refresh)
+                        return a.id, q
+                    except Exception as ex:
+                        app_logger.error(f"Error fetching quote for {a.code}: {ex}")
+                        return a.id, {"price": None, "prev_close": None}
+
+                quotes_map = {}
+                with ThreadPoolExecutor(max_workers=10) as executor:
+                    results = executor.map(fetch_asset_quote, assets)
+                    for asset_id, q in results:
+                        quotes_map[asset_id] = q
+
                 for asset in assets:
-                    if asset.asset_type == AssetType.BIST:
-                        quote = self.bist_service.fetch_quote(asset.code, self.force_refresh)
-                    else:
-                        quote = self.tefas_service.fetch_quote(asset.code, self.force_refresh)
+                    quote = quotes_map.get(asset.id) or {"price": None, "prev_close": None}
+                    if asset.asset_type == AssetType.TEFAS:
                         # Fon adı henüz çözülmemişse (ad == kod) TEFAS'tan tam adı çek
                         if not asset.name or asset.name == asset.code:
                             fund_name = self.tefas_service.fetch_fund_name(asset.code)
