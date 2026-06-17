@@ -1,7 +1,8 @@
-from datetime import datetime
-from sqlalchemy import Column, Integer, ForeignKey, Date, Numeric, UniqueConstraint
+from sqlalchemy import Column, Date, ForeignKey, Integer, Numeric, UniqueConstraint
 from sqlalchemy.orm import relationship
+
 from app.database.base import Base
+
 
 class PriceHistory(Base):
     __tablename__ = "price_history"

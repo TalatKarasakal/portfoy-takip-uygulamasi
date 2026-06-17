@@ -1,10 +1,11 @@
 import datetime as _dt
+from typing import Any, Dict, List, Optional
+
 import yfinance as yf
-from typing import Optional, List, Dict, Any
-from datetime import datetime, timedelta
-from app.utils.logger import prices_logger
-from app.utils.cache import price_cache
+
 from app.services.isyatirim_service import IsYatirimService
+from app.utils.cache import price_cache
+from app.utils.logger import prices_logger
 
 
 class BistService:

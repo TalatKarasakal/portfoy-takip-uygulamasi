@@ -1,8 +1,11 @@
 import enum
 from datetime import datetime
-from sqlalchemy import Column, Integer, ForeignKey, Enum, Numeric, Boolean, DateTime
+
+from sqlalchemy import Boolean, Column, DateTime, Enum, ForeignKey, Integer, Numeric
 from sqlalchemy.orm import relationship
+
 from app.database.base import Base
+
 
 class AlertType(enum.Enum):
     PRICE_ABOVE = "PRICE_ABOVE"

@@ -49,8 +49,8 @@ def test_record_close_ignores_nonpositive(session):
 
 
 def test_bist_falls_back_to_isyatirim(monkeypatch):
-    from app.services.bist_service import BistService
     from app.services import bist_service as bist_mod
+    from app.services.bist_service import BistService
     from app.utils.cache import price_cache
     price_cache.clear()
 

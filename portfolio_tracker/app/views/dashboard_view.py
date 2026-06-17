@@ -1,14 +1,16 @@
 import time
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QTableView, QHeaderView
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QPainter, QColor
-from PySide6.QtCharts import QChart, QChartView, QPieSeries
+
 import pyqtgraph as pg
-from app.views.widgets.kpi_card import KPICard
-from app.views.transactions_view import TransactionTableModel
-from app.utils.formatters import format_currency, format_percent
-from app.utils.display import display
+from PySide6.QtCharts import QChart, QChartView, QPieSeries
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor, QPainter
+from PySide6.QtWidgets import QHBoxLayout, QHeaderView, QTableView, QVBoxLayout, QWidget
+
 from app.config import COLORS
+from app.utils.display import display
+from app.utils.formatters import format_percent
+from app.views.transactions_view import TransactionTableModel
+from app.views.widgets.kpi_card import KPICard
 
 # Donut grafiği dilim renk paleti (Türk kırmızısı vurgu rengi K/Z için kullanılmaz,
 # burada nötr/dağılım amaçlı bir palet tercih edildi).

@@ -1,14 +1,24 @@
 import datetime
 import time
 
-from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTabWidget,
-                                 QLabel, QPushButton, QButtonGroup, QCheckBox,
-                                 QTableWidget, QTableWidgetItem, QHeaderView,
-                                 QAbstractItemView)
-from PySide6.QtCore import Qt, QThread, Signal
-from PySide6.QtGui import QPainter, QColor
-from PySide6.QtCharts import QChart, QChartView, QPieSeries
 import pyqtgraph as pg
+from PySide6.QtCharts import QChart, QChartView, QPieSeries
+from PySide6.QtCore import Qt, QThread, Signal
+from PySide6.QtGui import QColor, QPainter
+from PySide6.QtWidgets import (
+    QAbstractItemView,
+    QButtonGroup,
+    QCheckBox,
+    QHBoxLayout,
+    QHeaderView,
+    QLabel,
+    QPushButton,
+    QTableWidget,
+    QTableWidgetItem,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
+)
 
 from app.config import COLORS
 from app.services.benchmark_service import BenchmarkService

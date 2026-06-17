@@ -1,7 +1,9 @@
-import pandas as pd
 import datetime
 from typing import Any, Dict, List, Optional
+
+import pandas as pd
 from sqlalchemy.orm import Session
+
 from app.models.asset import Asset, AssetType
 from app.models.transaction import Transaction, TransactionType
 from app.utils.logger import app_logger
@@ -83,33 +85,33 @@ class ImportExportService:
         try:
             # Tüm sayfaları okuyup (dict) işlem yapmaya çalışalım
             dfs = pd.read_excel(file_path, sheet_name=None)
-            
+
             success_any = False
             for sheet_name, df in dfs.items():
                 cols = [str(c).lower() for c in df.columns]
-                
+
                 # Senaryo 3: Tam İşlem Geçmişi
                 if any("tarih" in c for c in cols) and any("kod" in c for c in cols) and any("tür" in c for c in cols):
                     success_any = ImportExportService._process_full_transaction_history(session, df) or success_any
-                    
+
                 # Senaryo 2: Adet + Maliyet
                 elif any("kod" in c for c in cols) and any("adet" in c for c in cols) and any("maliyet" in c for c in cols):
                     success_any = ImportExportService._process_quantity_cost(session, df) or success_any
-                    
+
                 # Kendi "Varlıklar" listemizse veya basit liste ("Fon Kodu", "Fon Adı") ise
                 elif any("kod" in c for c in cols) and any("ad" in c for c in cols):
                     success_any = ImportExportService._process_assets_only(session, df) or success_any
-                
+
                 # Senaryo 1: Yüzdelik — ayrı akışla (toplam değer gerekir) ele alınır.
                 elif ImportExportService._is_percentage_cols(cols):
                     continue
-                    
+
             if not success_any:
                 app_logger.error("Uygun sütun formatı hiçbir sayfada bulunamadı.")
                 return False
-                
+
             return True
-                
+
         except Exception as e:
             app_logger.error(f"Import error: {e}")
             return False
@@ -227,7 +229,7 @@ class ImportExportService:
             code = str(row.get("Kod", row.get("kod"))).strip().upper()
             if pd.isna(code) or not code:
                 continue
-                
+
             asset = session.query(Asset).filter_by(code=code).first()
             if not asset:
                 # Otomatik varlık oluşturma (Türünü belirleme heuristic)
@@ -235,10 +237,10 @@ class ImportExportService:
                 asset = Asset(code=code, name=code, asset_type=a_type)
                 session.add(asset)
                 session.flush()
-                
+
             ttype_str = str(row.get("Tür", row.get("tür", ""))).strip().upper()
             ttype = TransactionType.BUY if ttype_str in ["BUY", "AL", "ALIM"] else TransactionType.SELL
-            
+
             tx = Transaction(
                 asset_id=asset.id,
                 transaction_type=ttype,
@@ -259,7 +261,7 @@ class ImportExportService:
             code = str(row.get("Kod", row.get("kod"))).strip().upper()
             if pd.isna(code) or not code:
                 continue
-                
+
             asset = session.query(Asset).filter_by(code=code).first()
             if not asset:
                 a_type = AssetType.BIST if len(code) == 5 else AssetType.TEFAS
@@ -288,7 +290,7 @@ class ImportExportService:
             code = None
             name = None
             tutar = 0.0
-            
+
             for col in df.columns:
                 c_lower = str(col).lower()
                 if "kod" in c_lower:
@@ -300,13 +302,13 @@ class ImportExportService:
                         tutar = float(row[col])
                     except:
                         pass
-                        
+
             if not code or pd.isna(code) or code == 'NAN':
                 continue
-                
+
             if not name or pd.isna(name) or name == 'NAN':
                 name = code
-                
+
             asset = session.query(Asset).filter_by(code=code).first()
             if not asset:
                 # BIST genellikle 5 hane (Örn: THYAO), Fonlar genelde 3 hane (Örn: AFT)
@@ -314,7 +316,7 @@ class ImportExportService:
                 asset = Asset(code=code, name=name, asset_type=a_type)
                 session.add(asset)
                 session.flush() # ID'yi alabilmek için
-                
+
             # Eğer Tutar doldurulmuşsa bunu bir BUY işlemi olarak atalım (Miktar 1 birim)
             if tutar > 0 and not pd.isna(tutar):
                 tx = Transaction(
@@ -328,6 +330,6 @@ class ImportExportService:
                     note="Excel Import - Tutar (Toplu)"
                 )
                 session.add(tx)
-                
+
         session.commit()
         return True

@@ -1,7 +1,8 @@
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel
-from PySide6.QtCore import QVariantAnimation, Qt
-from app.utils.formatters import format_currency, format_percent
+from PySide6.QtCore import Qt, QVariantAnimation
+from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
+
 from app.utils.display import display
+from app.utils.formatters import format_percent
 
 
 class KPICard(QWidget):

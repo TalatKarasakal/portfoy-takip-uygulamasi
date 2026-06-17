@@ -1,8 +1,11 @@
 import enum
 from datetime import datetime
-from sqlalchemy import Column, Integer, ForeignKey, Enum, Date, Numeric, String, DateTime
+
+from sqlalchemy import Column, Date, DateTime, Enum, ForeignKey, Integer, Numeric, String
 from sqlalchemy.orm import relationship
+
 from app.database.base import Base
+
 
 class TransactionType(enum.Enum):
     BUY = "BUY"

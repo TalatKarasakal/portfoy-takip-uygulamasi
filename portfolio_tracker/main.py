@@ -1,9 +1,11 @@
 import sys
+
 from PySide6.QtWidgets import QApplication
-from app.views.main_window import MainWindow
+
 from app.database.engine import init_db
 from app.services.backup_service import BackupService
 from app.utils.logger import app_logger
+from app.views.main_window import MainWindow
 
 
 def main():
@@ -22,7 +24,7 @@ def main():
 
     # Gömülü fontları yükle (Inter + JetBrains Mono)
     try:
-        from app.utils.fonts import load_fonts, apply_default_font
+        from app.utils.fonts import apply_default_font, load_fonts
         load_fonts()
         apply_default_font(app, "Inter", 10)
     except Exception as e:

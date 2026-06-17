@@ -1,6 +1,5 @@
 """Teknik indikatör birim testleri."""
 
-import numpy as np
 import pandas as pd
 
 from app.services.ml import indicators

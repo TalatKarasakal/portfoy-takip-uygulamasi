@@ -1,8 +1,11 @@
-import httpx
 import xml.etree.ElementTree as ET
 from typing import Optional
-from app.utils.logger import prices_logger
+
+import httpx
+
 from app.utils.cache import price_cache
+from app.utils.logger import prices_logger
+
 
 class CurrencyService:
     TCMB_URL = "https://www.tcmb.gov.tr/kurlar/today.xml"
@@ -10,7 +13,7 @@ class CurrencyService:
     def fetch_usd_try(self, force_refresh: bool = False) -> Optional[float]:
         """TCMB'den güncel USD/TRY Efektif Satış (veya Döviz Satış) kurunu çeker."""
         cache_key = "CURRENCY_USD_TRY"
-        
+
         if not force_refresh:
             cached_price = price_cache.get(cache_key)
             if cached_price is not None:
@@ -21,10 +24,10 @@ class CurrencyService:
             with httpx.Client(timeout=10.0) as client:
                 response = client.get(self.TCMB_URL)
                 response.raise_for_status()
-                
+
             xml_data = response.text
             root = ET.fromstring(xml_data)
-            
+
             # USD düğümünü bul
             usd_node = root.find(".//Currency[@Kod='USD']")
             if usd_node is not None:
@@ -36,10 +39,10 @@ class CurrencyService:
                     # Farklı bir TTL uygulamak istenirse cache.set'e özel parametre verilebilir.
                     price_cache.set(cache_key, rate)
                     return rate
-            
+
             prices_logger.warning("USD rate not found in TCMB XML structure")
             return None
-            
+
         except Exception as e:
             prices_logger.error(f"Error fetching USD/TRY from TCMB: {e}")
             return None

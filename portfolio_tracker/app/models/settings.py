@@ -1,5 +1,7 @@
 from sqlalchemy import Column, String
+
 from app.database.base import Base
+
 
 class Settings(Base):
     __tablename__ = "settings"

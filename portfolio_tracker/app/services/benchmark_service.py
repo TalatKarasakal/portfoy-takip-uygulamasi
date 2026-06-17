@@ -13,8 +13,8 @@ from typing import Dict, List, Tuple
 
 import yfinance as yf
 
-from app.utils.logger import prices_logger
 from app.utils.cache import price_cache
+from app.utils.logger import prices_logger
 
 # Bir ons altın = 31.1034768 gram
 OUNCE_TO_GRAM = 31.1034768
