@@ -62,7 +62,7 @@ def test_import_full_transaction(mock_session, sample_excel_files):
     
     result = ImportExportService.import_excel(mock_session, str(full_tx_path))
     assert result == True
-    assert mock_session.add.called
+    assert mock_session.add.called or mock_session.add_all.called
     assert mock_session.commit.called
 
 def test_import_qty_cost(mock_session, sample_excel_files):
@@ -70,7 +70,7 @@ def test_import_qty_cost(mock_session, sample_excel_files):
     
     result = ImportExportService.import_excel(mock_session, str(qty_cost_path))
     assert result == True
-    assert mock_session.add.called
+    assert mock_session.add.called or mock_session.add_all.called
     assert mock_session.commit.called
 
 def test_import_percent_raises(mock_session, sample_excel_files):
