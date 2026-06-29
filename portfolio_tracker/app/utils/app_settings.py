@@ -35,7 +35,7 @@ DEFAULT_SETTINGS: Dict[str, str] = {
     "ai_local_api_key": "",
     # Google Gemini (ücretsiz katman, API anahtarı gerektirir) ayarları
     "ai_gemini_api_key": "",
-    "ai_gemini_model": "gemini-1.5-flash",
+    "ai_gemini_model": "gemini-2.0-flash",
 }
 
 

@@ -212,6 +212,7 @@ class PortfolioViewModel(QObject):
         self.cached_kpi_data = {}
         self.cost_method = self._load_cost_method()
         self._thread = None
+        self._reload_pending = False
 
     def _load_cost_method(self) -> str:
         """Aktif maliyet metodunu (WAC/FIFO/LIFO) ayarlardan okur."""
@@ -231,6 +232,12 @@ class PortfolioViewModel(QObject):
             self.load_data()
 
     def load_data(self, cost_method=None, force_refresh=False):
+        # Bir yükleme sürerken yenisini başlatma: çalışan QThread'in son referansı
+        # kaybolup yok edilirse Qt "Destroyed while running" ile uygulamayı
+        # çökertir. Bunun yerine mevcut yükleme bitince bir kez yeniden çalış.
+        if self._thread is not None and self._thread.isRunning():
+            self._reload_pending = True
+            return
         method = cost_method or self.cost_method
         self.loading_started.emit()
         self._thread = PortfolioLoaderThread(
@@ -238,8 +245,15 @@ class PortfolioViewModel(QObject):
         )
         self._thread.data_loaded_signal.connect(self._on_data_loaded_success)
         self._thread.error_signal.connect(self._on_data_loaded_error)
-        self._thread.finished.connect(lambda: self.loading_finished.emit())
+        self._thread.finished.connect(self._on_loader_finished)
         self._thread.start()
+
+    def _on_loader_finished(self):
+        self.loading_finished.emit()
+        # Yükleme sürerken gelen bir yenileme isteği biriktiyse şimdi çalıştır.
+        if self._reload_pending:
+            self._reload_pending = False
+            self.load_data()
 
     @Slot(list, dict)
     def _on_data_loaded_success(self, items, kpi_data):

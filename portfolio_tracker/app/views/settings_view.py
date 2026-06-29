@@ -145,7 +145,7 @@ class SettingsView(QWidget):
         form_ai.addRow("Gemini API Anahtarı:", self.ai_gemini_key_edit)
 
         self.ai_gemini_model_edit = QLineEdit()
-        self.ai_gemini_model_edit.setPlaceholderText("gemini-1.5-flash")
+        self.ai_gemini_model_edit.setPlaceholderText("gemini-2.0-flash")
         form_ai.addRow("Gemini Modeli:", self.ai_gemini_model_edit)
 
         self.btn_test_ai = QPushButton("Bağlantıyı Sına")
@@ -241,7 +241,7 @@ class SettingsView(QWidget):
         self.ai_local_url_edit.setText(settings.get("ai_local_url", "http://localhost:1234/v1"))
         self.ai_local_model_edit.setText(settings.get("ai_local_model", ""))
         self.ai_gemini_key_edit.setText(settings.get("ai_gemini_api_key", ""))
-        self.ai_gemini_model_edit.setText(settings.get("ai_gemini_model", "gemini-1.5-flash"))
+        self.ai_gemini_model_edit.setText(settings.get("ai_gemini_model", "gemini-2.0-flash"))
 
     def save_settings(self):
         new_s = {
@@ -257,7 +257,7 @@ class SettingsView(QWidget):
             "ai_local_url": self.ai_local_url_edit.text().strip() or "http://localhost:1234/v1",
             "ai_local_model": self.ai_local_model_edit.text().strip(),
             "ai_gemini_api_key": self.ai_gemini_key_edit.text().strip(),
-            "ai_gemini_model": self.ai_gemini_model_edit.text().strip() or "gemini-1.5-flash",
+            "ai_gemini_model": self.ai_gemini_model_edit.text().strip() or "gemini-2.0-flash",
         }
         self.view_model.save_settings(new_s)
 
@@ -271,7 +271,7 @@ class SettingsView(QWidget):
             "ai_local_model": self.ai_local_model_edit.text().strip(),
             "ai_local_api_key": "",
             "ai_gemini_api_key": self.ai_gemini_key_edit.text().strip(),
-            "ai_gemini_model": self.ai_gemini_model_edit.text().strip() or "gemini-1.5-flash",
+            "ai_gemini_model": self.ai_gemini_model_edit.text().strip() or "gemini-2.0-flash",
         }
 
     def on_test_ai_clicked(self):

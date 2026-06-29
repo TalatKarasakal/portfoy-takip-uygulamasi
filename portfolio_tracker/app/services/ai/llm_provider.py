@@ -304,7 +304,7 @@ class GeminiProvider(LLMProvider):
     name = "gemini"
     BASE = "https://generativelanguage.googleapis.com/v1beta/models"
 
-    def __init__(self, api_key: str = "", model: str = "gemini-1.5-flash") -> None:
+    def __init__(self, api_key: str = "", model: str = "gemini-2.0-flash") -> None:
         self.api_key = api_key
         self.model = model
 
@@ -351,7 +351,7 @@ class GeminiProvider(LLMProvider):
             raise LLMError(f"Gemini'ye bağlanılamadı: {e}")
 
     def supports_vision(self) -> bool:
-        return True  # gemini-1.5-flash/pro multimodaldir
+        return True  # gemini-2.0-flash/pro multimodaldir
 
     def analyze_image(self, image_bytes, mime_type, prompt, system=None):
         if not self.api_key:
@@ -406,7 +406,7 @@ def get_provider(settings: Dict[str, str]) -> Optional[LLMProvider]:
     if provider == "gemini":
         return GeminiProvider(
             api_key=settings.get("ai_gemini_api_key", ""),
-            model=settings.get("ai_gemini_model", "gemini-1.5-flash"),
+            model=settings.get("ai_gemini_model", "gemini-2.0-flash"),
         )
     return None
 
