@@ -48,6 +48,7 @@ jobs:
       run: ruff check portfolio_tracker/
 
     - name: Run Mypy
+      if: matrix.python-version == '3.11'
       run: |
         cd portfolio_tracker
         mypy app
