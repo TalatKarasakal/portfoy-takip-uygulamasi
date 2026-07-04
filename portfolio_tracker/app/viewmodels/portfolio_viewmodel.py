@@ -371,8 +371,10 @@ class PortfolioViewModel(QObject):
                         "type": tx.transaction_type.name,
                         "quantity": float(tx.quantity),
                         "unit_price": float(tx.unit_price),
+                        "commission": float(tx.commission),
+                        "tax": float(tx.tax),
                         "total": total,
-                        "note": tx.note
+                        "note": tx.note or ""
                     })
                 return result
         except Exception as e:

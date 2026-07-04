@@ -151,6 +151,28 @@ QPushButton:hover {
     background-color: #E5E7EB;
 }
 
+QPushButton:pressed {
+    background-color: #D1D5DB;
+}
+
+/* Ana eylem butonu (Varlık Ekle, Yeni İşlem, Yeni Uyarı, Ayarları Kaydet) */
+QPushButton#primary_btn {
+    background-color: #E30A17;
+    border: 1px solid #E30A17;
+    color: white;
+    border-radius: 6px;
+    padding: 8px 16px;
+    font-weight: bold;
+}
+
+QPushButton#primary_btn:hover {
+    background-color: #C40913;
+}
+
+QPushButton#primary_btn:pressed {
+    background-color: #A50810;
+}
+
 /* Sekmeler */
 QTabWidget::pane {
     border: 1px solid #E5E7EB;
@@ -210,4 +232,21 @@ QCheckBox {
 /* QDialog Pencereleri */
 QDialog {
     background-color: #F9FAFB;
+}
+
+/* Kaydırma çubukları */
+QScrollBar:vertical {
+    background: #F3F4F6;
+    width: 10px;
+    margin: 0;
+}
+
+QScrollBar::handle:vertical {
+    background: #D1D5DB;
+    border-radius: 5px;
+    min-height: 24px;
+}
+
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    height: 0;
 }

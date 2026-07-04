@@ -153,6 +153,24 @@ QPushButton:pressed {
     background-color: #1F242B;
 }
 
+/* Ana eylem butonu (Varlık Ekle, Yeni İşlem, Yeni Uyarı, Ayarları Kaydet) */
+QPushButton#primary_btn {
+    background-color: #E30A17;
+    border: 1px solid #E30A17;
+    color: white;
+    border-radius: 6px;
+    padding: 8px 16px;
+    font-weight: bold;
+}
+
+QPushButton#primary_btn:hover {
+    background-color: #C40913;
+}
+
+QPushButton#primary_btn:pressed {
+    background-color: #A50810;
+}
+
 /* Sekmeler */
 QTabWidget::pane {
     border: 1px solid #2A2F38;

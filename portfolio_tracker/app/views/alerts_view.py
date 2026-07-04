@@ -86,21 +86,19 @@ class AlertsView(QWidget):
         toolbar.addStretch()
 
         self.btn_add = QPushButton(" + Yeni Uyarı")
-        self.btn_add.setStyleSheet(
-            "QPushButton { background-color: #E30A17; color: white; border-radius: 4px;"
-            " padding: 6px 12px; font-weight: bold; }"
-        )
+        self.btn_add.setObjectName("primary_btn")
         self.btn_add.clicked.connect(self.on_add)
         toolbar.addWidget(self.btn_add)
         layout.addLayout(toolbar)
 
         # Tablo
-        self.table = QTableWidget(0, 6)
+        self.table = QTableWidget(0, 7)
         self.table.setHorizontalHeaderLabels(
-            ["Varlık", "Koşul", "Eşik", "Durum", "Tetiklenme", ""]
+            ["Varlık", "Koşul", "Eşik", "Durum", "Tetiklenme", "", ""]
         )
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(6, QHeaderView.ResizeToContents)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         layout.addWidget(self.table)
@@ -137,9 +135,22 @@ class AlertsView(QWidget):
             self.table.setItem(r, 3, QTableWidgetItem(status))
             self.table.setItem(r, 4, QTableWidgetItem(row["triggered_at"] or "—"))
 
+            # Tetiklenen/pasif uyarı yeniden başlatılabilir, aktif olan durdurulabilir
+            if row["triggered_at"] or not row["is_active"]:
+                toggle_btn = QPushButton("Yeniden Başlat")
+                toggle_btn.clicked.connect(
+                    lambda _, aid=row["id"]: self.alerts_vm.set_active(aid, True)
+                )
+            else:
+                toggle_btn = QPushButton("Durdur")
+                toggle_btn.clicked.connect(
+                    lambda _, aid=row["id"]: self.alerts_vm.set_active(aid, False)
+                )
+            self.table.setCellWidget(r, 5, toggle_btn)
+
             del_btn = QPushButton("Sil")
             del_btn.clicked.connect(lambda _, aid=row["id"]: self.on_delete(aid))
-            self.table.setCellWidget(r, 5, del_btn)
+            self.table.setCellWidget(r, 6, del_btn)
 
     def on_add(self):
         assets = self.alerts_vm.get_available_assets()

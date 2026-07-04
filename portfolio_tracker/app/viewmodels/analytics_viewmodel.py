@@ -22,12 +22,14 @@ class AnalyticsViewModel(QObject):
                 # 1. XIRR Hesabı: Tüm nakit akışlarını çıkar
                 cash_flows = []
                 for tx in txs:
-                    # Alım negatif nakit çıkışı, satış pozitif nakit girişi
-                    amount = float(tx.total_cost)
+                    # Alım negatif nakit çıkışı, satış/temettü pozitif nakit girişi.
+                    # SPLIT nakit akışı üretmez (unit_price = katsayı, tutar değil).
+                    if tx.transaction_type == TransactionType.SPLIT:
+                        continue
                     if tx.transaction_type == TransactionType.BUY:
-                        cash_flows.append((tx.date, -amount))
+                        cash_flows.append((tx.date, -float(tx.total_cost)))
                     else:
-                        # net satış geliri
+                        # net satış/temettü geliri
                         net_revenue = (float(tx.unit_price) * float(tx.quantity)) - float(tx.commission) - float(tx.tax)
                         cash_flows.append((tx.date, net_revenue))
 

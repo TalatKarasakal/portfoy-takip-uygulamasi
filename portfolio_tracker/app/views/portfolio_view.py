@@ -199,10 +199,6 @@ class PortfolioView(QWidget):
 
         self.add_btn = QPushButton(" + Varlık Ekle")
         self.add_btn.setObjectName("primary_btn")
-        self.add_btn.setStyleSheet(
-            "QPushButton { background-color: #E30A17; color: white; border-radius: 4px;"
-            " padding: 6px 12px; font-weight: bold; }"
-        )
         self.add_btn.clicked.connect(self.on_add_btn_clicked)
         toolbar.addWidget(self.add_btn)
 
@@ -324,8 +320,9 @@ class PortfolioView(QWidget):
         dialog = AssetDialog(self, asset=row)
         if dialog.exec():
             data = dialog.get_data()
-            if data["name"]:
-                self.view_model.update_asset(row["id"], data["name"], data["type"])
+            # Ad boş bırakıldıysa kod kullanılır (ekleme akışıyla tutarlı)
+            name = data["name"] or row["code"]
+            self.view_model.update_asset(row["id"], name, data["type"])
 
     def delete_asset(self, row):
         confirm = QMessageBox.question(

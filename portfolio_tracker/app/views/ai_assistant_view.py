@@ -46,7 +46,7 @@ class AIAssistantView(QWidget):
         self._last_parsed: Dict[str, Any] = {}
 
         root = QVBoxLayout(self)
-        root.setContentsMargins(30, 30, 30, 30)
+        root.setContentsMargins(20, 20, 20, 20)
         root.setSpacing(16)
 
         header = QLabel("Yapay Zeka Asistanı")
@@ -505,8 +505,13 @@ class AIAssistantView(QWidget):
             self.btn_analyze,
             self.btn_news,
             self.btn_parse,
+            self.btn_pick_image,
         ):
             btn.setEnabled(not busy)
+        # İçe aktar butonu yalnızca tabloda satır varsa ve meşgul değilken aktif
+        self.btn_import_holdings.setEnabled(
+            not busy and self.vision_table.rowCount() > 0
+        )
 
 
 class TransactionConfirmDialog(QDialog):
@@ -524,11 +529,15 @@ class TransactionConfirmDialog(QDialog):
 
         self.type_combo = QComboBox()
         self.type_combo.addItems(["BIST", "TEFAS"])
+        self.type_combo.setCurrentText(data.get("asset_type", "BIST"))
         form.addRow("Varlık Türü:", self.type_combo)
 
         self.tx_combo = QComboBox()
-        self.tx_combo.addItems(["BUY", "SELL"])
-        self.tx_combo.setCurrentText(data.get("tx_type", "BUY"))
+        self.tx_combo.addItem("Alım", "BUY")
+        self.tx_combo.addItem("Satım", "SELL")
+        ti = self.tx_combo.findData(data.get("tx_type", "BUY"))
+        if ti >= 0:
+            self.tx_combo.setCurrentIndex(ti)
         form.addRow("İşlem:", self.tx_combo)
 
         self.date_edit = QLineEdit(data.get("date", ""))
@@ -562,7 +571,7 @@ class TransactionConfirmDialog(QDialog):
             "asset_type": self.type_combo.currentText(),
             "data": {
                 "asset_code": self.code_edit.text().strip().upper(),
-                "tx_type": self.tx_combo.currentText(),
+                "tx_type": self.tx_combo.currentData(),
                 "date": self.date_edit.text().strip(),
                 "quantity": self.qty_spin.value(),
                 "unit_price": self.price_spin.value(),

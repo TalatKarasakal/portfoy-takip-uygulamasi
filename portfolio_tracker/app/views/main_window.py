@@ -139,6 +139,8 @@ class MainWindow(QMainWindow):
         self.portfolio_vm.kpi_updated.connect(self._refresh_analytics)
         self.portfolio_vm.kpi_updated.connect(self._check_alerts)
         self.portfolio_vm.data_loaded.connect(lambda _: self.transaction_vm.load_transactions())
+        # İşlemler sekmesinden yapılan ekleme/güncelleme/silme portföyü de etkiler
+        self.transaction_vm.action_success.connect(lambda _msg: self.portfolio_vm.load_data())
         self.portfolio_vm.loading_started.connect(lambda: self.status_label.setText("⟳ Yenileniyor..."))
         self.portfolio_vm.loading_finished.connect(lambda: self.status_label.setText(""))
 

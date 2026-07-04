@@ -196,6 +196,7 @@ class AddTransactionDialog(QDialog):
                      "katına, maliyet yarıya iner). Adet alanı kullanılmaz.",
         }
         self.hint.setText(hints.get(t, ""))
+        self.spin_qty.setEnabled(t != "SPLIT")
         if t == "SPLIT":
             self.lbl_qty.setText("Adet (kullanılmaz):")
             self.lbl_price.setText("Katsayı:")
@@ -237,16 +238,13 @@ class TransactionsView(QWidget):
         toolbar.addWidget(self.search_input)
 
         self.type_filter = QComboBox()
-        self.type_filter.addItems(["Tümü", "Alım", "Satım"])
+        self.type_filter.addItems(["Tümü", "Alım", "Satım", "Temettü", "Bölünme"])
         toolbar.addWidget(self.type_filter)
 
         toolbar.addStretch()
 
         self.add_btn = QPushButton(" + Yeni İşlem")
-        self.add_btn.setStyleSheet(
-            "QPushButton { background-color: #E30A17; color: white; border-radius: 4px;"
-            " padding: 6px 12px; font-weight: bold; }"
-        )
+        self.add_btn.setObjectName("primary_btn")
         self.add_btn.clicked.connect(self.on_add_btn_clicked)
         toolbar.addWidget(self.add_btn)
 

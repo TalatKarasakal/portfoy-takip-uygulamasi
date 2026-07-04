@@ -66,6 +66,9 @@ class KPICard(QWidget):
             self.animation.setEndValue(target_value)
             self.animation.start()
             self.current_value = target_value
+        else:
+            # Değer aynı olsa da görüntüleme para birimi (₺/$) değişmiş olabilir
+            self.value_label.setText(self._format(target_value))
 
         self._apply_color_class(self.value_label, "CardValue", target_value, colored)
 

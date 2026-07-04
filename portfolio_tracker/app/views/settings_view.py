@@ -79,7 +79,7 @@ class SettingsView(QWidget):
         container = QWidget()
         scroll.setWidget(container)
         layout = QVBoxLayout(container)
-        layout.setContentsMargins(30, 30, 30, 30)
+        layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(18)
 
         # --- Temel Ayarlar ---
@@ -198,9 +198,7 @@ class SettingsView(QWidget):
 
         # Save Button
         self.btn_save = QPushButton("Ayarları Kaydet")
-        self.btn_save.setStyleSheet(
-            "background-color: #E30A17; color: white; padding: 10px; border-radius: 4px;"
-        )
+        self.btn_save.setObjectName("primary_btn")
         self.btn_save.clicked.connect(self.save_settings)
         layout.addWidget(self.btn_save)
 
