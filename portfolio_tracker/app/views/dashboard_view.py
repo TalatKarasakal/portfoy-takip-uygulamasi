@@ -102,6 +102,13 @@ class DashboardView(QWidget):
         text_color = QColor(palette["text_primary"])
         secondary = QColor(palette["text_secondary"])
 
+        # Grafik arka planlarını da temaya uydur (aksi halde aydınlık modda
+        # pyqtgraph/QtCharts koyu görünüyordu).
+        from PySide6.QtGui import QBrush
+        bg = QColor(palette["background"])
+        self.line_view.setBackground(bg)
+        self.donut_chart.setBackgroundBrush(QBrush(bg))
+
         self.donut_chart.setTitleBrush(text_color)
         self.donut_chart.legend().setLabelColor(text_color)
 

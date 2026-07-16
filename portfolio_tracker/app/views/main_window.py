@@ -68,6 +68,15 @@ class MainWindow(QMainWindow):
 
         sidebar_layout.addStretch()
 
+        # Manuel yenileme butonu — fiyatları/portföyü anında güncellemek için.
+        self.manual_refresh_btn = QPushButton("Şimdi Yenile")
+        self.manual_refresh_btn.setObjectName("manual_refresh_btn")
+        self.manual_refresh_btn.setIcon(qta.icon("fa5s.sync-alt", color="#6B7280"))
+        self.manual_refresh_btn.setIconSize(QSize(16, 16))
+        self.manual_refresh_btn.setToolTip("Fiyatları ve portföyü şimdi güncelle")
+        self.manual_refresh_btn.clicked.connect(lambda: self.portfolio_vm.load_data())
+        sidebar_layout.addWidget(self.manual_refresh_btn)
+
         # Yenileme durum göstergesi (sidebar altı)
         self.status_label = QLabel("")
         self.status_label.setObjectName("status_label")

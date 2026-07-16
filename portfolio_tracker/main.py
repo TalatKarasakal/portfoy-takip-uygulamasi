@@ -1,14 +1,22 @@
+import os
 import sys
 
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
 from app.database.engine import init_db
 from app.services.backup_service import BackupService
 from app.utils.logger import app_logger
 from app.views.main_window import MainWindow
+from mac_identity import set_dock_icon, set_dock_name
+
+_ICON_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "app_icon.png")
 
 
 def main():
+    # macOS Dock adını GUI başlamadan önce ayarlamayı dene ("python" yerine).
+    set_dock_name("Portföy Takip")
+
     # İlk kullanım için veritabanını ilklendir
     init_db()
 
@@ -20,7 +28,11 @@ def main():
 
     app = QApplication(sys.argv)
     app.setApplicationName("Portföy Takip ve Analiz")
+    app.setApplicationDisplayName("Portföy Takip")
     app.setOrganizationName("PortfolioTracker")
+    app.setWindowIcon(QIcon(_ICON_PATH))
+    # Dock simgesini çalışma anında ayarla (python ile açınca da görünür).
+    set_dock_icon(_ICON_PATH)
 
     # Gömülü fontları yükle (Inter + JetBrains Mono)
     try:

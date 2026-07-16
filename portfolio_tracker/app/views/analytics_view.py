@@ -224,13 +224,17 @@ class AnalyticsView(QWidget):
         self._theme = theme
         palette = COLORS.get(theme, COLORS["dark"])
         text_color = QColor(palette["text_primary"])
+        from PySide6.QtGui import QBrush
+        bg = QColor(palette["background"])
         for chart in (getattr(self, "type_chart", None), getattr(self, "asset_chart", None)):
             if chart is not None:
+                chart.setBackgroundBrush(QBrush(bg))
                 chart.setTitleBrush(text_color)
                 chart.legend().setLabelColor(text_color)
         for plot in (getattr(self, "plot_widget", None), getattr(self, "benchmark_plot", None),
                      getattr(self, "attr_plot", None)):
             if plot is not None:
+                plot.setBackground(bg)
                 for ax_name in ("left", "bottom"):
                     ax = plot.getAxis(ax_name)
                     ax.setPen(pg.mkPen(color=palette["text_secondary"]))

@@ -1,6 +1,6 @@
 import qtawesome as qta
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt
-from PySide6.QtGui import QColor
+from PySide6.QtGui import QColor, QDoubleValidator
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -140,6 +140,15 @@ class AssetDialog(QDialog):
         self.combo_type = QComboBox()
         self.combo_type.addItems(["BIST", "TEFAS"])
 
+        # Yeni varlık için isteğe bağlı açılış pozisyonu (adet + alış fiyatı).
+        # Doldurulursa varlık portföyde hemen görünür.
+        self.input_qty = QLineEdit()
+        self.input_qty.setPlaceholderText("Opsiyonel — örn: 100")
+        self.input_qty.setValidator(QDoubleValidator(0.0, 1e12, 6))
+        self.input_price = QLineEdit()
+        self.input_price.setPlaceholderText("Opsiyonel — birim alış fiyatı")
+        self.input_price.setValidator(QDoubleValidator(0.0, 1e12, 6))
+
         if asset:
             self.input_code.setText(asset.get("code", ""))
             self.input_code.setEnabled(False)  # kod değiştirilemez
@@ -149,6 +158,9 @@ class AssetDialog(QDialog):
         form.addRow("Varlık Kodu:", self.input_code)
         form.addRow("Varlık Adı:", self.input_name)
         form.addRow("Tür:", self.combo_type)
+        if not asset:
+            form.addRow("Adet:", self.input_qty)
+            form.addRow("Alış Fiyatı:", self.input_price)
         layout.addLayout(form)
 
         btn_layout = QHBoxLayout()
@@ -166,6 +178,8 @@ class AssetDialog(QDialog):
             "code": self.input_code.text().strip(),
             "name": self.input_name.text().strip(),
             "type": self.combo_type.currentText(),
+            "quantity": self.input_qty.text().strip().replace(",", "."),
+            "unit_price": self.input_price.text().strip().replace(",", "."),
         }
 
 
@@ -282,7 +296,10 @@ class PortfolioView(QWidget):
             if data["code"]:
                 # Ad boşsa kod kullanılır; TEFAS fonları için gerçek ad otomatik çekilir
                 name = data["name"] or data["code"]
-                self.view_model.add_asset(data["code"], name, data["type"])
+                self.view_model.add_asset(
+                    data["code"], name, data["type"],
+                    quantity=data.get("quantity"), unit_price=data.get("unit_price"),
+                )
             else:
                 QMessageBox.warning(self, "Hata", "Lütfen en az Varlık Kodu girin.")
 

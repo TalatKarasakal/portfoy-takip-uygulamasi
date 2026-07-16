@@ -48,13 +48,27 @@ class AssetChartDialog(QDialog):
         self.setWindowTitle(f"{code} — Fiyat Grafiği")
         self.resize(720, 460)
 
+        # Aktif temayı ana pencereden bul (aksi halde grafik her zaman koyu
+        # olup aydınlık modda kötü görünüyordu).
+        self._theme = "dark"
+        w = parent
+        while w is not None and not hasattr(w, "current_theme"):
+            w = w.parent()
+        if w is not None:
+            self._theme = getattr(w, "current_theme", "dark")
+        self._palette = COLORS.get(self._theme, COLORS["dark"])
+
         layout = QVBoxLayout(self)
         self.status = QLabel("Veri çekiliyor, lütfen bekleyin...")
         self.status.setAlignment(Qt.AlignCenter)
         layout.addWidget(self.status)
 
         self.plot = pg.PlotWidget(axisItems={"bottom": pg.DateAxisItem(orientation="bottom")})
-        self.plot.setBackground("transparent")
+        self.plot.setBackground(self._palette["background"])
+        for ax_name in ("left", "bottom"):
+            ax = self.plot.getAxis(ax_name)
+            ax.setPen(pg.mkPen(color=self._palette["text_secondary"]))
+            ax.setTextPen(pg.mkPen(color=self._palette["text_secondary"]))
         self.plot.showGrid(x=True, y=True, alpha=0.3)
         self.plot.setVisible(False)
         layout.addWidget(self.plot)
@@ -72,7 +86,7 @@ class AssetChartDialog(QDialog):
         self.plot.setVisible(True)
         xs = [time.mktime(r["date"].timetuple()) for r in records]
         ys = [r["price"] for r in records]
-        self.plot.plot(xs, ys, pen=pg.mkPen(color=COLORS["dark"]["secondary"], width=2))
+        self.plot.plot(xs, ys, pen=pg.mkPen(color=self._palette["secondary"], width=2))
 
     def _on_failed(self, msg):
         self.status.setText(f"Grafik yüklenemedi: {msg}")

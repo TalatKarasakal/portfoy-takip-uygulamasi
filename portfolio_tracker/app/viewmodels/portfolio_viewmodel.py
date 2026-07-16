@@ -277,15 +277,40 @@ class PortfolioViewModel(QObject):
     def _on_data_loaded_error(self, err):
         self.error_occurred.emit(err)
 
-    def add_asset(self, code: str, name: str, a_type: str):
+    def add_asset(self, code: str, name: str, a_type: str, quantity=None, unit_price=None):
+        """Varlık ekler. İsteğe bağlı adet + alış fiyatı verilirse, varlığın
+        portföyde hemen görünmesi için bir açılış (BUY) işlemi de oluşturur.
+        """
         try:
             with get_session() as session:
                 asset_type = AssetType.BIST if a_type == "BIST" else AssetType.TEFAS
-                existing = session.query(Asset).filter_by(code=code.upper()).first()
-                if not existing:
-                    new_asset = Asset(code=code.upper(), name=name, asset_type=asset_type)
-                    session.add(new_asset)
-                    session.commit()
+                asset = session.query(Asset).filter_by(code=code.upper()).first()
+                if not asset:
+                    asset = Asset(code=code.upper(), name=name, asset_type=asset_type)
+                    session.add(asset)
+                    session.flush()  # asset.id için
+
+                # İsteğe bağlı açılış işlemi (adet ve fiyat girildiyse)
+                try:
+                    q = float(quantity) if quantity not in (None, "") else 0.0
+                    p = float(unit_price) if unit_price not in (None, "") else 0.0
+                except (TypeError, ValueError):
+                    q = p = 0.0
+                if q > 0 and p > 0:
+                    from datetime import date as _date
+
+                    from app.models.transaction import Transaction, TransactionType
+                    session.add(Transaction(
+                        asset_id=asset.id,
+                        transaction_type=TransactionType.BUY,
+                        date=_date.today(),
+                        quantity=q,
+                        unit_price=p,
+                        commission=0,
+                        tax=0,
+                        note="Açılış (varlık eklerken)",
+                    ))
+                session.commit()
             self.load_data()
         except Exception as e:
             app_logger.error(f"Error adding asset: {e}")

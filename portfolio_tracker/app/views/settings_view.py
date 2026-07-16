@@ -95,7 +95,7 @@ class SettingsView(QWidget):
         form_basic.addRow("Varsayılan Para Birimi:", self.currency_combo)
 
         self.refresh_combo = QComboBox()
-        self.refresh_combo.addItems(["15", "30", "60", "Manuel"])
+        self.refresh_combo.addItems(["15", "30", "60", "120", "240", "Manuel"])
         form_basic.addRow("Yenileme Sıklığı (dk):", self.refresh_combo)
 
         self.cost_method_combo = QComboBox()

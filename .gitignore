@@ -21,3 +21,6 @@ build/
 
 # Test virtualenv (Claude tarafından oluşturuldu)
 .venv-test/
+
+# macOS uygulama paketi (yerel)
+Portföy Takip.app/
