@@ -1,11 +1,16 @@
 import sqlite3
+from decimal import Decimal
 
 import pytest
+from alembic import command
 from sqlalchemy import create_engine
 
 import app.models  # noqa: F401
-from app.database.base import Base
-from app.database.migration_service import MigrationError, MigrationService
+from app.database.migration_service import (
+    MigrationError,
+    MigrationService,
+    alembic_config,
+)
 from app.services.backup_service import BackupResult
 
 
@@ -29,15 +34,17 @@ def test_new_database_is_created_at_head(tmp_path):
                 "SELECT name FROM sqlite_master WHERE type='table'"
             ).fetchall()
         }
-    assert revision == "0001_initial"
-    assert {"assets", "transactions", "settings"}.issubset(tables)
+    assert revision == "0002_portfolios_cash"
+    assert {"assets", "transactions", "settings", "portfolios", "cash_entries"}.issubset(tables)
     engine.dispose()
 
 
 def test_legacy_database_requires_approval_and_is_stamped(tmp_path):
     database = tmp_path / "legacy.db"
     engine = _engine(database)
-    Base.metadata.create_all(engine)
+    command.upgrade(alembic_config(str(engine.url)), "0001_initial")
+    with engine.begin() as connection:
+        connection.exec_driver_sql("DROP TABLE alembic_version")
     plan = MigrationService.inspect_plan(engine)
     assert plan.is_legacy
     assert plan.requires_backup
@@ -54,7 +61,7 @@ def test_legacy_database_requires_approval_and_is_stamped(tmp_path):
     MigrationService.ensure_current(engine, approved=True, backup_callback=backup)
     with sqlite3.connect(database) as connection:
         revision = connection.execute("SELECT version_num FROM alembic_version").fetchone()[0]
-    assert revision == "0001_initial"
+    assert revision == "0002_portfolios_cash"
     assert backups == [True]
     engine.dispose()
 
@@ -67,4 +74,40 @@ def test_unknown_schema_is_rejected(tmp_path):
 
     with pytest.raises(MigrationError, match="Bilinmeyen"):
         MigrationService.inspect_plan(engine)
+    engine.dispose()
+
+
+def test_legacy_migration_infers_opening_cash_and_adds_query_index(tmp_path):
+    database = tmp_path / "legacy_with_data.db"
+    engine = _engine(database)
+    command.upgrade(alembic_config(str(engine.url)), "0001_initial")
+    with engine.begin() as connection:
+        connection.exec_driver_sql(
+            "INSERT INTO assets (id, code, name, asset_type, currency) "
+            "VALUES (1, 'THYAO', 'THYAO', 'BIST', 'TRY')"
+        )
+        connection.exec_driver_sql(
+            """
+            INSERT INTO transactions
+                (id, asset_id, transaction_type, date, quantity, unit_price,
+                 commission, tax)
+            VALUES (1, 1, 'BUY', '2024-01-02', 10, 100, 2, 0)
+            """
+        )
+        connection.exec_driver_sql("DROP TABLE alembic_version")
+
+    MigrationService.ensure_current(
+        engine, approved=True, backup_callback=lambda: BackupResult(True)
+    )
+
+    with sqlite3.connect(database) as connection:
+        opening = connection.execute(
+            "SELECT amount FROM cash_entries WHERE note='Migration açılış bakiyesi'"
+        ).fetchone()[0]
+        plan = connection.execute(
+            "EXPLAIN QUERY PLAN SELECT * FROM transactions "
+            "WHERE portfolio_id=1 AND asset_id=1 ORDER BY date, id"
+        ).fetchall()
+    assert Decimal(str(opening)) == Decimal("1002")
+    assert any("ix_transactions_portfolio_asset_date_id" in str(row) for row in plan)
     engine.dispose()

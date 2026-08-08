@@ -17,6 +17,7 @@ class Transaction(Base):
     __tablename__ = "transactions"
 
     id = Column(Integer, primary_key=True, index=True)
+    portfolio_id = Column(Integer, ForeignKey("portfolios.id"), nullable=False, default=1)
     asset_id = Column(Integer, ForeignKey("assets.id"), nullable=False)
     transaction_type = Column(Enum(TransactionType), nullable=False)
     date = Column(Date, nullable=False)
@@ -28,6 +29,7 @@ class Transaction(Base):
     created_at = Column(UTCDateTime, default=utc_now)
 
     asset = relationship("Asset", back_populates="transactions")
+    portfolio = relationship("Portfolio", back_populates="transactions")
 
     @property
     def total_cost(self):

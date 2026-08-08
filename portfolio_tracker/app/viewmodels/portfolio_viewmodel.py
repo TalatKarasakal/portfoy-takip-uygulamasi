@@ -1,3 +1,4 @@
+import datetime
 from concurrent.futures import ThreadPoolExecutor
 
 from PySide6.QtCore import QObject, QThread, Signal, Slot
@@ -6,8 +7,10 @@ from sqlalchemy.orm import joinedload
 from app.database.session import get_session
 from app.models.asset import Asset, AssetType
 from app.models.settings import Settings
+from app.models.transaction import Transaction
 from app.services.bist_service import BistService
 from app.services.currency_service import CurrencyService
+from app.services.portfolio_account_service import PortfolioAccountService
 from app.services.portfolio_service import PortfolioService
 from app.services.price_history_service import PriceHistoryService
 from app.services.snapshot_service import SnapshotService
@@ -20,18 +23,36 @@ class PortfolioLoaderThread(QThread):
     data_loaded_signal = Signal(list, dict)
     error_signal = Signal(str)
 
-    def __init__(self, cost_method, force_refresh, bist_service, tefas_service, currency_service):
+    def __init__(
+        self,
+        cost_method,
+        force_refresh,
+        bist_service,
+        tefas_service,
+        currency_service,
+        portfolio_id,
+    ):
         super().__init__()
         self.cost_method = cost_method
         self.force_refresh = force_refresh
         self.bist_service = bist_service
         self.tefas_service = tefas_service
         self.currency_service = currency_service
+        self.portfolio_id = portfolio_id
 
     def run(self):
         try:
             with get_session() as session:
-                assets = session.query(Asset).options(joinedload(Asset.transactions)).all()
+                asset_query = session.query(Asset).options(joinedload(Asset.transactions))
+                if self.portfolio_id is not None:
+                    asset_query = (
+                        asset_query.join(Transaction)
+                        .filter(Transaction.portfolio_id == self.portfolio_id)
+                        .distinct()
+                    )
+                else:
+                    asset_query = asset_query.join(Transaction).distinct()
+                assets = asset_query.all()
                 portfolio_items = []
 
                 total_value_try = 0.0
@@ -43,20 +64,22 @@ class PortfolioLoaderThread(QThread):
                 failed_codes = []
                 stale_codes = []
 
-                def fetch_asset_quote(a):
+                def fetch_asset_quote(asset_data):
+                    asset_id, code, asset_type = asset_data
                     try:
-                        if a.asset_type == AssetType.BIST:
-                            q = self.bist_service.fetch_quote(a.code, self.force_refresh)
+                        if asset_type == AssetType.BIST.name:
+                            q = self.bist_service.fetch_quote(code, self.force_refresh)
                         else:
-                            q = self.tefas_service.fetch_quote(a.code, self.force_refresh)
-                        return a.id, q
+                            q = self.tefas_service.fetch_quote(code, self.force_refresh)
+                        return asset_id, q
                     except Exception as ex:
-                        app_logger.error(f"Error fetching quote for {a.code}: {ex}")
-                        return a.id, {"price": None, "prev_close": None}
+                        app_logger.error(f"Error fetching quote for {code}: {ex}")
+                        return asset_id, {"price": None, "prev_close": None}
 
                 quotes_map = {}
+                quote_inputs = [(asset.id, asset.code, asset.asset_type.name) for asset in assets]
                 with ThreadPoolExecutor(max_workers=10) as executor:
-                    results = executor.map(fetch_asset_quote, assets)
+                    results = executor.map(fetch_asset_quote, quote_inputs)
                     for asset_id, q in results:
                         quotes_map[asset_id] = q
 
@@ -87,7 +110,11 @@ class PortfolioLoaderThread(QThread):
                             prev_close = last  # değişim hesaplanamaz
                             is_stale = True
 
-                    txs = asset.transactions
+                    txs = [
+                        tx
+                        for tx in asset.transactions
+                        if self.portfolio_id is None or tx.portfolio_id == self.portfolio_id
+                    ]
                     stats = PortfolioService.calculate_cost_and_pnl(txs, current_price, method=self.cost_method)
 
                     # Gerçekleşmiş K/Z tüm varlıklar için toplanır (tamamen satılmış
@@ -134,7 +161,13 @@ class PortfolioLoaderThread(QThread):
                             "pnl_pct": item_pnl_pct,
                         })
 
-                # Portföy yüzdesi hesapla
+                securities_value_try = total_value_try
+                cash_balance = float(
+                    PortfolioAccountService.cash_balance(session, self.portfolio_id)
+                )
+                total_value_try = securities_value_try + cash_balance
+
+                # Portföy yüzdesi, nakit dahil toplam değer üzerinden hesaplanır.
                 for item in portfolio_items:
                     item["portfolio_pct"] = (
                         (item["current_value"] / total_value_try * 100) if total_value_try > 0 else 0
@@ -158,17 +191,28 @@ class PortfolioLoaderThread(QThread):
                     worst = min(portfolio_items, key=lambda x: x["pnl_pct"])
 
                 # Günlük snapshot kaydı (gerçek zaman serisi grafikleri için)
-                if total_value_try > 0:
+                if total_value_try > 0 and self.portfolio_id is not None:
                     SnapshotService.record_snapshot(
                         session,
                         total_value_try=total_value_try,
                         total_cost_try=total_cost_try,
                         unrealized_pnl_try=unrealized_pnl_total,
                         total_value_usd=total_value_usd,
+                        portfolio_id=self.portfolio_id,
+                        cash_balance_try=cash_balance,
+                        net_external_flow_try=float(
+                            PortfolioAccountService.external_flow_for_date(
+                                session, self.portfolio_id, datetime.date.today()
+                            )
+                        ),
                     )
 
                 # Zaman serisi geçmişi (dashboard küçük grafik)
-                history = SnapshotService.get_history(session, days=90)
+                history = (
+                    SnapshotService.get_history(session, days=90, portfolio_id=self.portfolio_id)
+                    if self.portfolio_id is not None
+                    else SnapshotService.get_consolidated_history(session, days=90)
+                )
 
                 kpi_data = {
                     "total_value_try": total_value_try,
@@ -187,6 +231,9 @@ class PortfolioLoaderThread(QThread):
                     "stale_codes": stale_codes,
                     "history": history,
                     "portfolio_items": portfolio_items,
+                    "portfolio_id": self.portfolio_id,
+                    "cash_balance_try": cash_balance,
+                    "securities_value_try": securities_value_try,
                 }
                 self.data_loaded_signal.emit(portfolio_items, kpi_data)
 
@@ -202,6 +249,8 @@ class PortfolioViewModel(QObject):
     loading_started = Signal()
     loading_finished = Signal()
     kpi_updated = Signal(dict)
+    portfolios_loaded = Signal(list)
+    portfolio_selection_changed = Signal(object)
 
     def __init__(self):
         super().__init__()
@@ -213,6 +262,7 @@ class PortfolioViewModel(QObject):
         self.cost_method = self._load_cost_method()
         self._thread = None
         self._reload_pending = False
+        self.selected_portfolio_id = 1
 
     def _load_cost_method(self) -> str:
         """Aktif maliyet metodunu (WAC/FIFO/LIFO) ayarlardan okur."""
@@ -241,7 +291,12 @@ class PortfolioViewModel(QObject):
         method = cost_method or self.cost_method
         self.loading_started.emit()
         self._thread = PortfolioLoaderThread(
-            method, force_refresh, self.bist_service, self.tefas_service, self.currency_service
+            method,
+            force_refresh,
+            self.bist_service,
+            self.tefas_service,
+            self.currency_service,
+            self.selected_portfolio_id,
         )
         self._thread.data_loaded_signal.connect(self._on_data_loaded_success)
         self._thread.error_signal.connect(self._on_data_loaded_error)
@@ -301,6 +356,7 @@ class PortfolioViewModel(QObject):
 
                     from app.models.transaction import Transaction, TransactionType
                     session.add(Transaction(
+                        portfolio_id=self._require_concrete_portfolio(),
                         asset_id=asset.id,
                         transaction_type=TransactionType.BUY,
                         date=_date.today(),
@@ -331,13 +387,14 @@ class PortfolioViewModel(QObject):
             self.error_occurred.emit(str(e))
 
     def delete_asset(self, asset_id: int):
-        """Varlığı ve ona bağlı tüm işlem/uyarı/fiyat kayıtlarını siler."""
+        """Seçili portföydeki varlık işlemlerini siler; ortak kataloğu korur."""
         try:
+            portfolio_id = self._require_concrete_portfolio()
             with get_session() as session:
-                asset = session.query(Asset).filter_by(id=asset_id).first()
-                if asset:
-                    session.delete(asset)
-                    session.commit()
+                session.query(Transaction).filter_by(
+                    asset_id=asset_id, portfolio_id=portfolio_id
+                ).delete(synchronize_session=False)
+                session.commit()
             self.load_data()
         except Exception as e:
             app_logger.error(f"Error deleting asset: {e}")
@@ -348,6 +405,7 @@ class PortfolioViewModel(QObject):
             with get_session() as session:
                 from app.models.transaction import Transaction, TransactionType
                 tx = Transaction(
+                    portfolio_id=self._require_concrete_portfolio(),
                     asset_id=kwargs["asset_id"],
                     transaction_type=TransactionType[kwargs["tx_type"]],
                     date=kwargs["date"],
@@ -374,6 +432,11 @@ class PortfolioViewModel(QObject):
                 txs = (
                     session.query(Transaction)
                     .options(joinedload(Transaction.asset))
+                    .filter(
+                        True
+                        if self.selected_portfolio_id is None
+                        else Transaction.portfolio_id == self.selected_portfolio_id
+                    )
                     .order_by(desc(Transaction.date), desc(Transaction.id))
                     .limit(limit)
                     .all()
@@ -405,3 +468,37 @@ class PortfolioViewModel(QObject):
         except Exception as e:
             app_logger.error(f"Error fetching recent txs: {e}")
             return []
+
+    def _require_concrete_portfolio(self) -> int:
+        if self.selected_portfolio_id is None:
+            raise ValueError("İşlem yapmak için belirli bir portföy seçin.")
+        return self.selected_portfolio_id
+
+    def load_portfolios(self) -> None:
+        try:
+            with get_session() as session:
+                rows = PortfolioAccountService.list_portfolios(session)
+            self.portfolios_loaded.emit(rows)
+        except Exception as exc:
+            self.error_occurred.emit(str(exc))
+
+    def create_portfolio(self, name: str) -> None:
+        try:
+            with get_session() as session:
+                with session.begin():
+                    row = PortfolioAccountService.create_portfolio(session, name)
+                    portfolio_id = row.id
+            self.selected_portfolio_id = portfolio_id
+            self.load_portfolios()
+            self.portfolio_selection_changed.emit(portfolio_id)
+            self.load_data()
+        except Exception as exc:
+            self.error_occurred.emit(str(exc))
+
+    def set_portfolio(self, portfolio_id) -> None:
+        normalized = int(portfolio_id) if portfolio_id is not None else None
+        if normalized == self.selected_portfolio_id:
+            return
+        self.selected_portfolio_id = normalized
+        self.portfolio_selection_changed.emit(normalized)
+        self.load_data()

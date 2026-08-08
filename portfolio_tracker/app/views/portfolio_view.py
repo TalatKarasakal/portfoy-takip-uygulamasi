@@ -344,7 +344,7 @@ class PortfolioView(QWidget):
     def delete_asset(self, row):
         confirm = QMessageBox.question(
             self, "Onay",
-            f"'{row['code']}' varlığı ve ona bağlı TÜM işlemler/uyarılar silinecek. "
+            f"'{row['code']}' varlığının seçili portföydeki tüm işlemleri silinecek. "
             "Devam edilsin mi?",
             QMessageBox.Yes | QMessageBox.No, QMessageBox.No
         )

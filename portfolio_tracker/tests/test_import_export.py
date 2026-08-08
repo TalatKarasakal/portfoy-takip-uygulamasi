@@ -2,7 +2,6 @@ from unittest.mock import MagicMock
 
 import pandas as pd
 import pytest
-from conftest import dispose_session_engine
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -19,7 +18,8 @@ def db_session():
     Base.metadata.create_all(engine)
     s = sessionmaker(bind=engine)()
     yield s
-    dispose_session_engine(s)
+    s.close()
+    engine.dispose()
 
 @pytest.fixture
 def mock_session():

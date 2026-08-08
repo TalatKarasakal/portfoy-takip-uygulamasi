@@ -12,7 +12,6 @@ from typing import Optional
 from app.config import BACKUP_DIR, DATABASE_FILE
 from app.utils.logger import app_logger
 
-
 REQUIRED_TABLES = frozenset({"assets", "transactions", "settings"})
 
 

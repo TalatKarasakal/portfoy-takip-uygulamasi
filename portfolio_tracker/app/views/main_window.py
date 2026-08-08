@@ -5,7 +5,9 @@ import qtawesome as qta
 from PySide6.QtCore import QSize, Qt, QTimer
 from PySide6.QtWidgets import (
     QApplication,
+    QComboBox,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QMainWindow,
     QPushButton,
@@ -42,7 +44,20 @@ class MainWindow(QMainWindow):
         logo_label.setObjectName("logo_label")
         logo_label.setAlignment(Qt.AlignCenter)
         sidebar_layout.addWidget(logo_label)
-        sidebar_layout.addSpacing(30)
+        sidebar_layout.addSpacing(12)
+
+        portfolio_row = QHBoxLayout()
+        self.portfolio_selector = QComboBox()
+        self.portfolio_selector.setAccessibleName("Aktif portföy")
+        self.portfolio_selector.setToolTip("Tek portföy veya konsolide görünüm seçin")
+        self.add_portfolio_btn = QPushButton("+")
+        self.add_portfolio_btn.setFixedWidth(34)
+        self.add_portfolio_btn.setToolTip("Yeni portföy oluştur")
+        self.add_portfolio_btn.setAccessibleName("Yeni portföy oluştur")
+        portfolio_row.addWidget(self.portfolio_selector, stretch=1)
+        portfolio_row.addWidget(self.add_portfolio_btn)
+        sidebar_layout.addLayout(portfolio_row)
+        sidebar_layout.addSpacing(18)
 
         # Sekme Butonları
         self.nav_buttons = {}
@@ -117,6 +132,9 @@ class MainWindow(QMainWindow):
         self.settings_vm.data_wiped.connect(lambda: self.portfolio_vm.load_data())
         self.settings_vm.data_changed.connect(lambda: self.portfolio_vm.load_data())
         self.alerts_vm.alert_triggered.connect(self._on_alert_triggered)
+        self.portfolio_vm.portfolios_loaded.connect(self._on_portfolios_loaded)
+        self.portfolio_selector.currentIndexChanged.connect(self._on_portfolio_selected)
+        self.add_portfolio_btn.clicked.connect(self._create_portfolio)
 
         # Yapay zeka asistanını güncel portföy verisiyle besle
         self.portfolio_vm.data_loaded.connect(self.ai_vm.update_portfolio_data)
@@ -158,7 +176,27 @@ class MainWindow(QMainWindow):
 
         # İlk yüklemeler
         self.settings_vm.load_settings()
+        self.portfolio_vm.load_portfolios()
         self.portfolio_vm.load_data()
+
+    def _on_portfolios_loaded(self, portfolios):
+        selected = self.portfolio_vm.selected_portfolio_id
+        self.portfolio_selector.blockSignals(True)
+        self.portfolio_selector.clear()
+        self.portfolio_selector.addItem("Tüm Portföyler", None)
+        for portfolio in portfolios:
+            self.portfolio_selector.addItem(portfolio["name"], portfolio["id"])
+        index = self.portfolio_selector.findData(selected)
+        self.portfolio_selector.setCurrentIndex(index if index >= 0 else 0)
+        self.portfolio_selector.blockSignals(False)
+
+    def _on_portfolio_selected(self, _index):
+        self.portfolio_vm.set_portfolio(self.portfolio_selector.currentData())
+
+    def _create_portfolio(self):
+        name, accepted = QInputDialog.getText(self, "Yeni Portföy", "Portföy adı:")
+        if accepted and name.strip():
+            self.portfolio_vm.create_portfolio(name)
 
     def _detect_system_theme(self) -> str:
         """İşletim sistemi temasını algılar (Qt 6.5+); aksi halde dark döner."""
