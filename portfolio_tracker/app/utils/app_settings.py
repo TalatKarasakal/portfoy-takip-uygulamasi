@@ -13,7 +13,15 @@ from app.database.session import get_session
 from app.models.settings import Settings
 from app.utils.logger import app_logger
 
-# Tüm uygulama ayarlarının varsayılan değerleri (yapay zeka anahtarları dahil).
+CLOUD_CONSENT_VERSION = "2026-08-v1"
+CLOUD_DATA_FIELDS = (
+    "varlık kodu ve türü",
+    "adet, maliyet ve güncel değer",
+    "portföy toplamları ve performans göstergeleri",
+    "kullanıcının yazdığı mesaj veya yüklediği görüntü",
+)
+
+# API anahtarları bu sözlükte veya SQLite'ta tutulmaz.
 DEFAULT_SETTINGS: Dict[str, str] = {
     # Temel ayarlar
     "theme": "system",
@@ -33,9 +41,9 @@ DEFAULT_SETTINGS: Dict[str, str] = {
     "ai_local_url": "http://localhost:1234/v1",
     "ai_local_model": "",
     "ai_local_api_key": "",
-    # Google Gemini (ücretsiz katman, API anahtarı gerektirir) ayarları
-    "ai_gemini_api_key": "",
+    # Google Gemini (fiyat/kota sağlayıcı koşullarına bağlıdır)
     "ai_gemini_model": "gemini-2.0-flash",
+    "ai_cloud_consent_version": "",
 }
 
 
@@ -45,6 +53,8 @@ def load_settings_dict() -> Dict[str, str]:
     try:
         with get_session() as session:
             for row in session.query(Settings).all():
+                if row.key == "ai_gemini_api_key":
+                    continue
                 if row.value is not None:
                     settings_dict[row.key] = row.value
     except Exception as e:  # pragma: no cover - veritabanı henüz hazır değilse

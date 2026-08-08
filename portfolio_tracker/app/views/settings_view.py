@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
 )
 
 from app.services.import_export_service import PORTFOLIO_EXPORT_COLUMNS, ImportRowStatus
+from app.utils.app_settings import CLOUD_CONSENT_VERSION, CLOUD_DATA_FIELDS
 
 APP_VERSION = "1.0.0"
 
@@ -203,8 +204,8 @@ class SettingsView(QWidget):
         ai_hint = QLabel(
             "Ollama yerelde tamamen ücretsizdir (ollama.com). 'local' seçeneği "
             "LM Studio, llama.cpp, Jan gibi OpenAI-uyumlu yerel sunucularla "
-            "çalışır. Gemini'nin ücretsiz katmanı için API anahtarı: "
-            "aistudio.google.com/app/apikey"
+            "çalışır. Gemini'nin fiyatı, kotası ve kullanım sınırları Google'ın "
+            "güncel sağlayıcı koşullarına bağlıdır."
         )
         ai_hint.setWordWrap(True)
         ai_hint.setStyleSheet("color: #6B7280; font-size: 11px;")
@@ -290,10 +291,39 @@ class SettingsView(QWidget):
         self.ai_ollama_model_edit.setText(settings.get("ai_ollama_model", "llama3.1"))
         self.ai_local_url_edit.setText(settings.get("ai_local_url", "http://localhost:1234/v1"))
         self.ai_local_model_edit.setText(settings.get("ai_local_model", ""))
-        self.ai_gemini_key_edit.setText(settings.get("ai_gemini_api_key", ""))
+        self._gemini_key_configured = settings.get("ai_gemini_key_configured") == "1"
+        self._cloud_consent_version = settings.get("ai_cloud_consent_version", "")
+        self.ai_gemini_key_edit.clear()
+        self.ai_gemini_key_edit.setPlaceholderText(
+            "Sistem kasasında kayıtlı — değiştirmek için yeni anahtar girin"
+            if self._gemini_key_configured
+            else "Gemini API anahtarı"
+        )
+        secret_store_available = settings.get("ai_secret_store_available") == "1"
+        self.ai_gemini_key_edit.setEnabled(secret_store_available)
+        if not secret_store_available:
+            self.ai_gemini_key_edit.setPlaceholderText(
+                "Güvenli sistem anahtar kasası kullanılamıyor"
+            )
         self.ai_gemini_model_edit.setText(settings.get("ai_gemini_model", "gemini-2.0-flash"))
 
     def save_settings(self):
+        consent_version = getattr(self, "_cloud_consent_version", "")
+        if self.ai_provider_combo.currentText() == "gemini" and consent_version != CLOUD_CONSENT_VERSION:
+            fields = "\n".join(f"• {field}" for field in CLOUD_DATA_FIELDS)
+            answer = QMessageBox.question(
+                self,
+                "Bulut Veri Gönderimi Onayı",
+                "Gemini etkinleştirildiğinde aşağıdaki veriler Google'ın bulut "
+                "hizmetine gönderilebilir:\n\n"
+                f"{fields}\n\nFiyat ve kota koşulları sağlayıcıya bağlıdır. Onaylıyor musunuz?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+            if answer != QMessageBox.Yes:
+                return
+            consent_version = CLOUD_CONSENT_VERSION
+            self._cloud_consent_version = consent_version
         new_s = {
             "theme": self.theme_combo.currentText(),
             "default_currency": self.currency_combo.currentText(),
@@ -308,6 +338,7 @@ class SettingsView(QWidget):
             "ai_local_model": self.ai_local_model_edit.text().strip(),
             "ai_gemini_api_key": self.ai_gemini_key_edit.text().strip(),
             "ai_gemini_model": self.ai_gemini_model_edit.text().strip() or "gemini-2.0-flash",
+            "ai_cloud_consent_version": consent_version,
         }
         self.view_model.save_settings(new_s)
 
@@ -320,7 +351,6 @@ class SettingsView(QWidget):
             "ai_local_url": self.ai_local_url_edit.text().strip() or "http://localhost:1234/v1",
             "ai_local_model": self.ai_local_model_edit.text().strip(),
             "ai_local_api_key": "",
-            "ai_gemini_api_key": self.ai_gemini_key_edit.text().strip(),
             "ai_gemini_model": self.ai_gemini_model_edit.text().strip() or "gemini-2.0-flash",
         }
 
@@ -332,7 +362,15 @@ class SettingsView(QWidget):
         """
         from app.services.ai.llm_provider import get_provider
 
-        provider = get_provider(self._current_ai_form_settings())
+        entered_key = self.ai_gemini_key_edit.text().strip()
+        try:
+            provider = get_provider(
+                self._current_ai_form_settings(),
+                **({"gemini_api_key": entered_key} if entered_key else {}),
+            )
+        except Exception as exc:
+            QMessageBox.warning(self, "Bağlantı Testi", str(exc))
+            return
         if provider is None:
             QMessageBox.information(
                 self, "Yapay Zeka",

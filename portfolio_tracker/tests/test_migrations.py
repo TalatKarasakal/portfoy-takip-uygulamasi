@@ -34,7 +34,7 @@ def test_new_database_is_created_at_head(tmp_path):
                 "SELECT name FROM sqlite_master WHERE type='table'"
             ).fetchall()
         }
-    assert revision == "0003_import_batches"
+    assert revision == "0004_remove_secrets"
     assert {"assets", "transactions", "settings", "portfolios", "cash_entries"}.issubset(tables)
     engine.dispose()
 
@@ -61,7 +61,7 @@ def test_legacy_database_requires_approval_and_is_stamped(tmp_path):
     MigrationService.ensure_current(engine, approved=True, backup_callback=backup)
     with sqlite3.connect(database) as connection:
         revision = connection.execute("SELECT version_num FROM alembic_version").fetchone()[0]
-    assert revision == "0003_import_batches"
+    assert revision == "0004_remove_secrets"
     assert backups == [True]
     engine.dispose()
 
@@ -110,4 +110,25 @@ def test_legacy_migration_infers_opening_cash_and_adds_query_index(tmp_path):
         ).fetchall()
     assert Decimal(str(opening)) == Decimal("1002")
     assert any("ix_transactions_portfolio_asset_date_id" in str(row) for row in plan)
+    engine.dispose()
+
+
+def test_plaintext_gemini_key_is_removed_by_migration(tmp_path):
+    database = tmp_path / "secret.db"
+    engine = _engine(database)
+    config = alembic_config(str(engine.url))
+    command.upgrade(config, "0003_import_batches")
+    with engine.begin() as connection:
+        connection.exec_driver_sql(
+            "INSERT INTO settings (key, value) VALUES "
+            "('ai_gemini_api_key', 'must-not-remain')"
+        )
+
+    command.upgrade(config, "head")
+
+    with sqlite3.connect(database) as connection:
+        row = connection.execute(
+            "SELECT value FROM settings WHERE key='ai_gemini_api_key'"
+        ).fetchone()
+    assert row is None
     engine.dispose()

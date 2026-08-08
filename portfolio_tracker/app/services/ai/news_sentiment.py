@@ -1,8 +1,8 @@
 """Haber başlıklarından duygu (sentiment) analizi.
 
 Bir varlık (BIST hissesi) hakkındaki güncel haber başlıklarını Google News'in
-ücretsiz RSS akışından çeker ve LLM ile pozitif/negatif/nötr duygu skoru üretir.
-Tüm bileşenler ücretsizdir.
+RSS akışından çeker ve seçilen LLM ile pozitif/negatif/nötr duygu skoru üretir.
+Bulut sağlayıcılarının fiyat ve kota koşulları değişebilir.
 """
 
 import xml.etree.ElementTree as ET

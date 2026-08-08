@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
@@ -57,7 +58,7 @@ class AIAssistantView(QWidget):
         # Yapay zeka kapalıysa uyarı şeridi
         self.warning_label = QLabel(
             "⚠ Yapay zeka henüz yapılandırılmadı. Ayarlar > Yapay Zeka bölümünden "
-            "Ollama (ücretsiz, yerel) veya Google Gemini (ücretsiz katman) seçin."
+            "Ollama (yerel) veya Google Gemini (sağlayıcı koşullarına bağlı) seçin."
         )
         self.warning_label.setWordWrap(True)
         self.warning_label.setStyleSheet(
@@ -76,8 +77,8 @@ class AIAssistantView(QWidget):
         self.tabs.addTab(self._build_risk_tab(), "Risk & Öneri")
         self.tabs.addTab(self._build_technical_tab(), "Teknik Analiz")
         self.tabs.addTab(self._build_news_tab(), "Haber Analizi")
-        self.tabs.addTab(self._build_nl_tab(), "Doğal Dil İşlem")
-        self.tabs.addTab(self._build_vision_tab(), "Fotoğraftan Aktar")
+        self.tabs.addTab(self._build_nl_tab(), "Doğal Dil İşlem (Deneysel)")
+        self.tabs.addTab(self._build_vision_tab(), "Fotoğraftan Aktar (Deneysel)")
 
         self._connect_signals()
         self.refresh_state()
@@ -189,7 +190,10 @@ class AIAssistantView(QWidget):
         layout = QVBoxLayout(widget)
 
         layout.addWidget(
-            QLabel("İşlemini gündelik dille yaz, yapay zeka forma çevirsin:")
+            QLabel(
+                "Deneysel özellik: İşlemini gündelik dille yaz; sonuç yalnız "
+                "doğrulama ekranından sonra kaydedilir."
+            )
         )
         self.nl_input = QLineEdit()
         self.nl_input.setPlaceholderText("Ör. Dün 100 THYAO aldım 280 liradan")
@@ -208,10 +212,12 @@ class AIAssistantView(QWidget):
         widget = QWidget()
         layout = QVBoxLayout(widget)
 
-        layout.addWidget(QLabel(
-            "Portföy ekran görüntünü/fotoğrafını seç; yapay zeka varlıkları "
-            "çıkarsın. Çıkan listeyi düzenleyip onaylayabilirsin."
-        ))
+        layout.addWidget(
+            QLabel(
+                "Deneysel özellik: Portföy görüntüsünden varlıklar çıkarılır. "
+                "Listeyi kaydetmeden önce düzenleyip doğrulaman gerekir."
+            )
+        )
 
         row = QHBoxLayout()
         self.btn_pick_image = QPushButton("Fotoğraf Seç...")
@@ -439,6 +445,17 @@ class AIAssistantView(QWidget):
         )
         if not path:
             return
+        if self.vm.cloud_upload_notice_required():
+            answer = QMessageBox.question(
+                self,
+                "Görüntüyü Buluta Gönder",
+                "Seçtiğiniz görüntünün tamamı analiz için Google Gemini bulut "
+                "hizmetine gönderilecek. Devam etmek istiyor musunuz?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+            if answer != QMessageBox.Yes:
+                return
         self.vision_path_label.setText(path)
         self.vision_table.setRowCount(0)
         self.btn_import_holdings.setEnabled(False)
@@ -519,7 +536,7 @@ class TransactionConfirmDialog(QDialog):
 
     def __init__(self, data: Dict[str, Any], parent=None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("İşlemi Onayla")
+        self.setWindowTitle("Deneysel Sonucu Doğrula")
         self.setMinimumWidth(360)
 
         form = QFormLayout(self)

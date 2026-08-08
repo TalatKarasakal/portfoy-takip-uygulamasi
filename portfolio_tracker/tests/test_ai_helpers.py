@@ -51,8 +51,33 @@ def test_get_provider_ollama():
 
 
 def test_get_provider_gemini():
-    p = get_provider({"ai_provider": "gemini", "ai_gemini_api_key": "abc"})
+    p = get_provider({"ai_provider": "gemini"}, gemini_api_key="abc")
     assert p is not None and p.name == "gemini"
+
+
+def test_gemini_uses_api_key_header_not_url(monkeypatch):
+    from app.services.ai import llm_provider as mod
+
+    captured = {}
+
+    class FakeResponse:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"candidates": [{"content": {"parts": [{"text": "yanıt"}]}}]}
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        captured.update(url=url, headers=headers, payload=json)
+        return FakeResponse()
+
+    monkeypatch.setattr(mod.httpx, "post", fake_post)
+    provider = mod.GeminiProvider(api_key="super-secret", model="gemini-test")
+
+    assert provider.complete("merhaba") == "yanıt"
+    assert "super-secret" not in captured["url"]
+    assert "?key=" not in captured["url"]
+    assert captured["headers"]["x-goog-api-key"] == "super-secret"
 
 
 def test_get_provider_local():

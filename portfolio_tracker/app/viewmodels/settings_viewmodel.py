@@ -10,7 +10,8 @@ from app.models.transaction import Transaction
 from app.services.backup_service import BackupService
 from app.services.import_export_service import ImportExportService
 from app.services.report_service import export_cashflow_excel
-from app.utils.app_settings import DEFAULT_SETTINGS
+from app.services.secret_service import SecretService, SecretStoreError
+from app.utils.app_settings import CLOUD_CONSENT_VERSION, DEFAULT_SETTINGS
 from app.utils.logger import app_logger
 
 
@@ -24,7 +25,7 @@ class SettingsViewModel(QObject):
     percentage_import_needed = Signal(str)  # (dosya yolu) — toplam değer sorulmalı
     import_preview_ready = Signal(object)
 
-    # Yapay zeka anahtarları dahil tüm varsayılanlar app_settings'te tutulur
+    # Hassas olmayan varsayılanlar app_settings'te; API anahtarları sistem kasasındadır.
     default_settings = DEFAULT_SETTINGS
 
     def load_settings(self):
@@ -33,22 +34,50 @@ class SettingsViewModel(QObject):
                 db_settings = session.query(Settings).all()
                 settings_dict = self.default_settings.copy()
                 for s in db_settings:
-                    settings_dict[s.key] = s.value
+                    if s.key != "ai_gemini_api_key":
+                        settings_dict[s.key] = s.value
+                settings_dict["ai_secret_store_available"] = (
+                    "1" if SecretService.is_available() else "0"
+                )
+                settings_dict["ai_gemini_key_configured"] = (
+                    "1" if SecretService.has_gemini_api_key() else "0"
+                )
                 self.settings_loaded.emit(settings_dict)
         except Exception as e:
             self.error_occurred.emit(str(e))
 
     def save_settings(self, new_settings: dict):
         try:
+            payload = dict(new_settings)
+            gemini_key = str(payload.pop("ai_gemini_api_key", "")).strip()
+            clear_gemini_key = str(payload.pop("ai_gemini_clear_key", "0")) == "1"
+            if payload.get("ai_provider") == "gemini":
+                if payload.get("ai_cloud_consent_version") != CLOUD_CONSENT_VERSION:
+                    raise ValueError("Gemini etkinleştirilmeden önce bulut veri onayı gerekir.")
+                if not SecretService.is_available():
+                    raise SecretStoreError(
+                        "Güvenli sistem anahtar kasası kullanılamadığı için Gemini devre dışı."
+                    )
+                if not gemini_key and not SecretService.has_gemini_api_key():
+                    raise ValueError("Gemini için API anahtarı girin.")
+            if clear_gemini_key:
+                SecretService.delete_gemini_api_key()
+            elif gemini_key:
+                SecretService.set_gemini_api_key(gemini_key)
+
             with get_session() as session:
-                if new_settings:
+                # Eski sürümlerde kalmış olabilecek düz metin sırrı da temizle.
+                session.query(Settings).filter(
+                    Settings.key == "ai_gemini_api_key"
+                ).delete()
+                if payload:
                     existing_settings = (
                         session.query(Settings)
-                        .filter(Settings.key.in_(new_settings.keys()))
+                        .filter(Settings.key.in_(payload.keys()))
                         .all()
                     )
                     existing_dict = {s.key: s for s in existing_settings}
-                    for k, v in new_settings.items():
+                    for k, v in payload.items():
                         if k in existing_dict:
                             existing_dict[k].value = str(v)
                         else:

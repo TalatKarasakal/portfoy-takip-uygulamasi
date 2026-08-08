@@ -64,29 +64,33 @@ Dağıtım hedefleri macOS için `.dmg`, Windows için `.exe` artefaktlarıdır.
 
 ## Yapay Zeka Özellikleri
 
-Uygulamaya, tamamen **ücretsiz** çalışan bir yapay zeka asistanı eklendi.
-Asistan sol menüdeki **"Asistan"** sekmesinden kullanılır.
+Uygulamada yerel veya bulut sağlayıcısıyla çalışan isteğe bağlı bir asistan
+bulunur. Asistan sol menüdeki **"Asistan"** sekmesinden kullanılır.
 
-### Sağlayıcı seçenekleri (her ikisi de ücretsiz)
+### Sağlayıcı seçenekleri
 
 Ayarlar > **Yapay Zeka** bölümünden seçilir:
 
 - **Ollama** — Kendi makinenizde çalışan yerel modeller (llama3.1, qwen2.5,
   gemma2 vb.). İnternet gerektirmez, tamamen ücretsiz ve gizlidir.
   Kurulum: https://ollama.com (`ollama pull llama3.1`).
-- **Google Gemini** — Ücretsiz katmanı olan bulut modeli. Yalnızca bir API
-  anahtarı gerekir: https://aistudio.google.com/app/apikey
+- **Google Gemini** — Fiyatı, ücretsiz kotası ve kullanım sınırları Google'ın
+  güncel koşullarına bağlı olan bulut modeli. API anahtarı işletim sisteminin
+  güvenli kasasında tutulur; portföy verisi yalnız sürümlü kullanıcı onayından
+  sonra gönderilir: https://aistudio.google.com/app/apikey
 
 ### Özellikler
 
 1. **Portföy Asistanı (sohbet)** — Portföyünüz hakkında doğal dilde soru sorun.
 2. **Otomatik Portföy Özeti** — Güncel durumun kısa Türkçe özeti.
-3. **Doğal Dil ile İşlem Girişi** — "Dün 100 THYAO aldım 280 liradan" → işlem kaydı.
+3. **Doğal Dil ile İşlem Girişi (Deneysel)** — Sonuç doğrulanmadan kaydedilmez.
 4. **Akıllı Risk Analizi** — Konsantrasyon ve çeşitlendirme uyarıları (LLM'siz, anında).
 5. **Teknik Analiz** — SMA, EMA, RSI, MACD ve trend sinyali (yerel hesaplama).
 6. **Anomali Tespiti** — Olağandışı fiyat hareketlerini yakalar (yerel hesaplama).
 7. **Haber Duygu Analizi** — Bir varlık hakkındaki güncel haberlerin duygu skoru.
 8. **Hedef Bazlı Öneri** — Risk + teknik göstergelere dayalı iyileştirme önerileri.
+9. **Görüntüden Aktarım (Deneysel)** — Bulut sağlayıcısında ayrıca dosya gönderim
+   onayı ister ve bulunan kayıtları kaydetmeden önce gösterir.
 
 > Teknik analiz, anomali tespiti ve risk analizi tamamen yerel ve LLM'siz
 > çalışır; sağlayıcı seçilmemiş olsa bile kullanılabilir.

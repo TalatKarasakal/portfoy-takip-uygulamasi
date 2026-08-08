@@ -18,10 +18,11 @@ from app.services.ai.portfolio_context import SYSTEM_PROMPT, build_portfolio_con
 from app.services.ai.risk_analyzer import analyze_risk
 from app.services.bist_service import BistService
 from app.services.ml import anomaly, indicators
+from app.services.secret_service import SecretService
 from app.services.tefas_service import TefasService
 from app.services.transaction_service import TransactionCommand, TransactionService
-from app.utils.app_settings import load_settings_dict
-from app.utils.logger import app_logger
+from app.utils.app_settings import CLOUD_CONSENT_VERSION, load_settings_dict
+from app.utils.logger import app_logger, redact_sensitive
 
 
 class AIWorker(QThread):
@@ -41,7 +42,7 @@ class AIWorker(QThread):
             self.result_signal.emit(self.tag, result)
         except Exception as e:
             app_logger.error(f"AI işlemi hatası ({self.tag}): {e}")
-            self.error_signal.emit(self.tag, str(e))
+            self.error_signal.emit(self.tag, redact_sensitive(e))
 
 
 class AIViewModel(QObject):
@@ -86,10 +87,28 @@ class AIViewModel(QObject):
 
     def is_ai_enabled(self) -> bool:
         """Yapay zekanın yapılandırılıp yapılandırılmadığını döndürür."""
-        return load_settings_dict().get("ai_provider", "none") != "none"
+        settings = load_settings_dict()
+        provider = settings.get("ai_provider", "none")
+        if provider == "gemini":
+            return (
+                settings.get("ai_cloud_consent_version") == CLOUD_CONSENT_VERSION
+                and SecretService.has_gemini_api_key()
+            )
+        return provider != "none"
+
+    def cloud_upload_notice_required(self) -> bool:
+        """Seçilen sağlayıcı dosyayı cihaz dışına gönderecekse True döndürür."""
+        return load_settings_dict().get("ai_provider") == "gemini"
 
     def _get_provider_or_raise(self):
         settings = load_settings_dict()
+        if (
+            settings.get("ai_provider") == "gemini"
+            and settings.get("ai_cloud_consent_version") != CLOUD_CONSENT_VERSION
+        ):
+            raise RuntimeError(
+                "Gemini kullanılmadan önce Ayarlar bölümündeki bulut veri onayını verin."
+            )
         provider = get_provider(settings)
         if provider is None:
             raise RuntimeError(

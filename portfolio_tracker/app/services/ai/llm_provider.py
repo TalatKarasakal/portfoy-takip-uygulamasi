@@ -1,11 +1,11 @@
 """LLM sağlayıcı soyutlaması.
 
-İki ücretsiz seçenek desteklenir:
+Yerel ve bulut sağlayıcıları desteklenir:
 
 * **Ollama** — Kullanıcının kendi makinesinde çalışan, tamamen ücretsiz ve
   internet gerektirmeyen yerel modeller (llama3.1, qwen2.5, gemma2 vb.).
-* **Google Gemini** — Ücretsiz katmanı olan bulut tabanlı model. Yalnızca bir
-  API anahtarı gerektirir (https://aistudio.google.com/app/apikey).
+* **Google Gemini** — Fiyat ve kota koşulları sağlayıcıya bağlı olan bulut
+  modeli. API anahtarı işletim sisteminin güvenli kasasında tutulur.
 
 Tüm sağlayıcılar `LLMProvider` arayüzünü uygular. Çağrılar `httpx` ile yapılır
 (projede zaten mevcut bir bağımlılık), bu yüzden ek paket gerekmez.
@@ -17,7 +17,7 @@ from typing import Dict, List, Optional
 
 import httpx
 
-from app.utils.logger import app_logger
+from app.utils.logger import app_logger, redact_sensitive
 
 # LLM çağrıları yavaş olabileceğinden cömert bir zaman aşımı veriyoruz.
 DEFAULT_TIMEOUT = 120.0
@@ -299,7 +299,7 @@ class OpenAICompatibleProvider(LLMProvider):
 
 
 class GeminiProvider(LLMProvider):
-    """Google Gemini ücretsiz katmanını kullanan sağlayıcı."""
+    """Google Gemini bulut API'sini güvenli header kimlik doğrulamasıyla kullanır."""
 
     name = "gemini"
     BASE = "https://generativelanguage.googleapis.com/v1beta/models"
@@ -311,11 +311,20 @@ class GeminiProvider(LLMProvider):
     def is_available(self) -> bool:
         return bool(self.api_key)
 
+    def _headers(self) -> Dict[str, str]:
+        return {
+            "Content-Type": "application/json",
+            "x-goog-api-key": self.api_key,
+        }
+
+    def _safe_error(self, error: object) -> str:
+        return redact_sensitive(error, (self.api_key,))
+
     def chat(self, messages: List[Dict[str, str]], system: Optional[str] = None) -> str:
         if not self.api_key:
             raise LLMError("Gemini API anahtarı tanımlı değil. Ayarlar'dan girin.")
 
-        url = f"{self.BASE}/{self.model}:generateContent?key={self.api_key}"
+        url = f"{self.BASE}/{self.model}:generateContent"
         contents = []
         for msg in messages:
             role = "user" if msg["role"] == "user" else "model"
@@ -326,7 +335,12 @@ class GeminiProvider(LLMProvider):
             payload["systemInstruction"] = {"parts": [{"text": system}]}
 
         try:
-            resp = httpx.post(url, json=payload, timeout=DEFAULT_TIMEOUT)
+            resp = httpx.post(
+                url,
+                json=payload,
+                headers=self._headers(),
+                timeout=DEFAULT_TIMEOUT,
+            )
             resp.raise_for_status()
             data = resp.json()
             candidates = data.get("candidates", [])
@@ -342,13 +356,15 @@ class GeminiProvider(LLMProvider):
                 detail = e.response.json().get("error", {}).get("message", "")
             except Exception:
                 pass
-            app_logger.error(f"Gemini HTTP hatası: {e} {detail}")
-            raise LLMError(f"Gemini isteği başarısız oldu: {detail or e}")
+            safe_detail = self._safe_error(detail or e)
+            app_logger.error("Gemini HTTP hatası: %s", safe_detail)
+            raise LLMError(f"Gemini isteği başarısız oldu: {safe_detail}")
         except LLMError:
             raise
         except Exception as e:
-            app_logger.error(f"Gemini bağlantı hatası: {e}")
-            raise LLMError(f"Gemini'ye bağlanılamadı: {e}")
+            safe_error = self._safe_error(e)
+            app_logger.error("Gemini bağlantı hatası: %s", safe_error)
+            raise LLMError(f"Gemini'ye bağlanılamadı: {safe_error}")
 
     def supports_vision(self) -> bool:
         return True  # gemini-2.0-flash/pro multimodaldir
@@ -357,7 +373,7 @@ class GeminiProvider(LLMProvider):
         if not self.api_key:
             raise LLMError("Gemini API anahtarı tanımlı değil. Ayarlar'dan girin.")
         b64 = base64.b64encode(image_bytes).decode("ascii")
-        url = f"{self.BASE}/{self.model}:generateContent?key={self.api_key}"
+        url = f"{self.BASE}/{self.model}:generateContent"
         payload: Dict = {
             "contents": [{
                 "role": "user",
@@ -370,7 +386,12 @@ class GeminiProvider(LLMProvider):
         if system:
             payload["systemInstruction"] = {"parts": [{"text": system}]}
         try:
-            resp = httpx.post(url, json=payload, timeout=DEFAULT_TIMEOUT)
+            resp = httpx.post(
+                url,
+                json=payload,
+                headers=self._headers(),
+                timeout=DEFAULT_TIMEOUT,
+            )
             resp.raise_for_status()
             data = resp.json()
             candidates = data.get("candidates", [])
@@ -381,11 +402,14 @@ class GeminiProvider(LLMProvider):
         except LLMError:
             raise
         except Exception as e:
-            app_logger.error(f"Gemini görüntü analizi hatası: {e}")
-            raise LLMError(f"Gemini görüntü analizi başarısız: {e}")
+            safe_error = self._safe_error(e)
+            app_logger.error("Gemini görüntü analizi hatası: %s", safe_error)
+            raise LLMError(f"Gemini görüntü analizi başarısız: {safe_error}")
 
 
-def get_provider(settings: Dict[str, str]) -> Optional[LLMProvider]:
+def get_provider(
+    settings: Dict[str, str], *, gemini_api_key: Optional[str] = None
+) -> Optional[LLMProvider]:
     """Ayar sözlüğüne göre uygun LLM sağlayıcısını oluşturur.
 
     Returns:
@@ -404,8 +428,14 @@ def get_provider(settings: Dict[str, str]) -> Optional[LLMProvider]:
             api_key=settings.get("ai_local_api_key", ""),
         )
     if provider == "gemini":
+        from app.services.secret_service import SecretService
+
         return GeminiProvider(
-            api_key=settings.get("ai_gemini_api_key", ""),
+            api_key=(
+                gemini_api_key
+                if gemini_api_key is not None
+                else SecretService.get_gemini_api_key()
+            ),
             model=settings.get("ai_gemini_model", "gemini-2.0-flash"),
         )
     return None
