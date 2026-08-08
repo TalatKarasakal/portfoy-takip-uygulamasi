@@ -114,19 +114,21 @@ class SettingsViewModel(QObject):
 
     def create_backup(self):
         try:
-            if BackupService.create_backup():
-                self.success_message.emit("Veritabanı yedeği başarıyla alındı.")
+            result = BackupService.create_backup()
+            if result:
+                self.success_message.emit(f"Veritabanı yedeği doğrulandı: {result.path}")
             else:
-                self.error_occurred.emit("Yedek alınamadı.")
+                self.error_occurred.emit(result.error or "Yedek alınamadı.")
         except Exception as e:
             self.error_occurred.emit(f"Yedekleme hatası: {str(e)}")
 
     def restore_backup(self, path: str):
         try:
-            if BackupService.restore_backup(path):
+            result = BackupService.restore_backup(path)
+            if result:
                 self.success_message.emit("Veritabanı başarıyla geri yüklendi. Uygulamayı yeniden başlatın.")
             else:
-                self.error_occurred.emit("Geri yükleme başarısız oldu.")
+                self.error_occurred.emit(result.error or "Geri yükleme başarısız oldu.")
         except Exception as e:
             self.error_occurred.emit(f"Geri yükleme hatası: {str(e)}")
 
@@ -134,7 +136,13 @@ class SettingsViewModel(QObject):
         """Tüm portföy verisini siler. Güvenlik için önce otomatik yedek alınır."""
         try:
             # Silmeden önce güvenlik yedeği
-            BackupService.create_backup()
+            backup_result = BackupService.create_backup()
+            if not backup_result:
+                self.error_occurred.emit(
+                    "Güvenlik yedeği alınamadığı için hiçbir veri silinmedi. "
+                    + backup_result.error
+                )
+                return
             with get_session() as session:
                 # Sıra önemli değil (cascade var) ama açıkça temizleyelim
                 session.query(Alert).delete()

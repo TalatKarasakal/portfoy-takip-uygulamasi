@@ -1,123 +1,142 @@
+import sqlite3
+
 import pytest
 
 from app.services.backup_service import BackupService
 
 
+def _create_portfolio_database(path, marker="active"):
+    with sqlite3.connect(path) as connection:
+        connection.executescript(
+            """
+            CREATE TABLE assets (id INTEGER PRIMARY KEY, code TEXT);
+            CREATE TABLE transactions (id INTEGER PRIMARY KEY, asset_id INTEGER);
+            CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT);
+            """
+        )
+        connection.execute("INSERT INTO settings VALUES ('marker', ?)", (marker,))
+
+
+def _marker(path):
+    with sqlite3.connect(path) as connection:
+        return connection.execute(
+            "SELECT value FROM settings WHERE key='marker'"
+        ).fetchone()[0]
+
+
 @pytest.fixture
 def mock_env(tmp_path, monkeypatch):
-    """Mocks the DATABASE_FILE and BACKUP_DIR to use temporary directories."""
     db_file = tmp_path / "portfolio.db"
     backup_dir = tmp_path / "backups"
     backup_dir.mkdir()
-
-    # Patch the constants in backup_service module
-    monkeypatch.setattr("app.services.backup_service.DATABASE_FILE", str(db_file))
-    monkeypatch.setattr("app.services.backup_service.BACKUP_DIR", str(backup_dir))
-
+    monkeypatch.setattr("app.services.backup_service.DATABASE_FILE", db_file)
+    monkeypatch.setattr("app.services.backup_service.BACKUP_DIR", backup_dir)
     return {"db_file": db_file, "backup_dir": backup_dir}
 
+
 def test_create_backup_no_db(mock_env):
-    """Test creating a backup when the database file does not exist."""
-    assert BackupService.create_backup() is False
-    assert len(list(mock_env["backup_dir"].iterdir())) == 0
+    result = BackupService.create_backup()
+    assert not result
+    assert not list(mock_env["backup_dir"].iterdir())
 
-def test_create_backup_success_no_rotation(mock_env):
-    """Test successfully creating a backup without triggering rotation."""
-    # Create a dummy database file
-    mock_env["db_file"].write_text("dummy database content")
 
-    assert BackupService.create_backup() is True
+def test_create_backup_is_valid_sqlite_snapshot(mock_env):
+    _create_portfolio_database(mock_env["db_file"])
 
-    # Verify backup was created
-    backups = list(mock_env["backup_dir"].iterdir())
-    assert len(backups) == 1
-    assert backups[0].name.startswith("backup_")
-    assert backups[0].name.endswith(".db")
-    assert backups[0].read_text() == "dummy database content"
+    result = BackupService.create_backup()
 
-def test_create_backup_with_rotation(mock_env):
-    """Test creating a backup and triggering the rotation logic (> 10 files)."""
-    mock_env["db_file"].write_text("dummy db")
+    assert result
+    assert result.path is not None
+    assert BackupService.validate_database(result.path)
+    assert _marker(result.path) == "active"
 
-    # Create 10 dummy backup files manually
-    for i in range(10):
-        # Using a fixed date format to control sorting
-        backup_name = f"backup_20230101_0000{i:02d}.db"
-        (mock_env["backup_dir"] / backup_name).write_text("old backup")
 
-    assert len(list(mock_env["backup_dir"].iterdir())) == 10
+def test_create_backup_rotates_only_regular_backups(mock_env):
+    _create_portfolio_database(mock_env["db_file"])
+    protected = mock_env["backup_dir"] / "backup_20260808_preimplementation.db"
+    _create_portfolio_database(protected, "protected")
+    for index in range(10):
+        path = mock_env["backup_dir"] / f"backup_20230101_0000{index:02d}.db"
+        _create_portfolio_database(path, str(index))
 
-    # Create the 11th backup
-    assert BackupService.create_backup() is True
+    assert BackupService.create_backup()
 
-    backups = list(mock_env["backup_dir"].iterdir())
-    assert len(backups) == 10
+    regular = [
+        path
+        for path in mock_env["backup_dir"].glob("backup_*.db")
+        if "preimplementation" not in path.name
+    ]
+    assert len(regular) == 10
+    assert protected.exists()
 
-    # The oldest backup (backup_20230101_000000.db) should have been deleted
-    backup_names = [b.name for b in backups]
-    assert "backup_20230101_000000.db" not in backup_names
 
-def test_create_backup_exception(mock_env, monkeypatch):
-    """Test exception handling during backup creation."""
-    mock_env["db_file"].write_text("dummy db")
+def test_create_backup_exception_cleans_temporary_file(mock_env, monkeypatch):
+    _create_portfolio_database(mock_env["db_file"])
 
-    def mock_copy2(*args, **kwargs):
+    def fail_copy(*_args, **_kwargs):
         raise OSError("Mock error")
 
-    monkeypatch.setattr("app.services.backup_service.shutil.copy2", mock_copy2)
+    monkeypatch.setattr(BackupService, "_copy_with_sqlite_backup", fail_copy)
+    result = BackupService.create_backup()
 
-    assert BackupService.create_backup() is False
+    assert not result
+    assert not list(mock_env["backup_dir"].glob("*.tmp"))
 
-def test_restore_backup_no_backup_file(mock_env):
-    """Test restoring from a non-existent backup file."""
-    assert BackupService.restore_backup(str(mock_env["backup_dir"] / "nonexistent.db")) is False
 
-def test_restore_backup_success_with_existing_db(mock_env):
-    """Test restoring a backup when an active database exists (creates safe copy)."""
-    # Create active DB
-    mock_env["db_file"].write_text("active db content")
+def test_validate_rejects_corrupt_and_wrong_schema(mock_env):
+    corrupt = mock_env["backup_dir"] / "corrupt.db"
+    corrupt.write_text("not sqlite", encoding="utf-8")
+    wrong = mock_env["backup_dir"] / "wrong.db"
+    with sqlite3.connect(wrong) as connection:
+        connection.execute("CREATE TABLE unrelated (id INTEGER PRIMARY KEY)")
 
-    # Create a backup file
-    backup_file = mock_env["backup_dir"] / "backup_to_restore.db"
-    backup_file.write_text("restored db content")
+    assert not BackupService.validate_database(corrupt)
+    preview = BackupService.validate_database(wrong)
+    assert not preview
+    assert "eksik" in preview.error
 
-    assert BackupService.restore_backup(str(backup_file)) is True
 
-    # Check that the database was restored
-    assert mock_env["db_file"].read_text() == "restored db content"
+def test_restore_backup_rejects_invalid_candidate_without_touching_active(mock_env):
+    _create_portfolio_database(mock_env["db_file"], "active")
+    candidate = mock_env["backup_dir"] / "invalid.db"
+    candidate.write_text("invalid", encoding="utf-8")
 
-    # Check that the temp safety copy was created
-    safety_copy = mock_env["backup_dir"] / "temp_safety_before_restore.db"
-    assert safety_copy.exists()
-    assert safety_copy.read_text() == "active db content"
+    result = BackupService.restore_backup(candidate)
 
-def test_restore_backup_success_no_existing_db(mock_env):
-    """Test restoring a backup when no active database exists."""
-    # Ensure active DB doesn't exist
-    assert not mock_env["db_file"].exists()
+    assert not result
+    assert _marker(mock_env["db_file"]) == "active"
 
-    # Create a backup file
-    backup_file = mock_env["backup_dir"] / "backup_to_restore.db"
-    backup_file.write_text("restored db content")
 
-    assert BackupService.restore_backup(str(backup_file)) is True
+def test_restore_backup_is_atomic_and_creates_safety_copy(mock_env):
+    _create_portfolio_database(mock_env["db_file"], "active")
+    candidate = mock_env["backup_dir"] / "candidate.db"
+    _create_portfolio_database(candidate, "restored")
 
-    # Check that the database was restored
-    assert mock_env["db_file"].exists()
-    assert mock_env["db_file"].read_text() == "restored db content"
+    result = BackupService.restore_backup(candidate)
 
-    # Temp safety copy should not exist because there was no active DB
-    safety_copy = mock_env["backup_dir"] / "temp_safety_before_restore.db"
-    assert not safety_copy.exists()
+    assert result
+    assert _marker(mock_env["db_file"]) == "restored"
+    safety_files = list(mock_env["backup_dir"].glob("safety_before_restore_*.db"))
+    assert len(safety_files) == 1
+    assert _marker(safety_files[0]) == "active"
 
-def test_restore_backup_exception(mock_env, monkeypatch):
-    """Test exception handling during backup restoration."""
-    backup_file = mock_env["backup_dir"] / "backup_to_restore.db"
-    backup_file.write_text("restored db")
 
-    def mock_copy2(*args, **kwargs):
-        raise OSError("Mock error")
+def test_restore_stops_when_safety_backup_fails(mock_env, monkeypatch):
+    _create_portfolio_database(mock_env["db_file"], "active")
+    candidate = mock_env["backup_dir"] / "candidate.db"
+    _create_portfolio_database(candidate, "restored")
+    original = BackupService.create_backup
 
-    monkeypatch.setattr("app.services.backup_service.shutil.copy2", mock_copy2)
+    def fail_safety(destination=None, *, rotate=True):
+        if destination is not None:
+            from app.services.backup_service import BackupResult
 
-    assert BackupService.restore_backup(str(backup_file)) is False
+            return BackupResult(False, error="forced")
+        return original(destination, rotate=rotate)
+
+    monkeypatch.setattr(BackupService, "create_backup", fail_safety)
+
+    result = BackupService.restore_backup(candidate)
+
+    assert not result
+    assert _marker(mock_env["db_file"]) == "active"
