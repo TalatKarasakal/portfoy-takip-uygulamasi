@@ -1,18 +1,124 @@
+"""Kayıpsız Excel round-trip, önizleme ve tek transaction içe aktarımı."""
+
+from __future__ import annotations
+
 import datetime
-from typing import Any, Dict, List, Optional
+import enum
+import unicodedata
+from dataclasses import dataclass, field
+from decimal import Decimal
+from pathlib import Path
+from typing import Any, Iterable, Optional
 
 import pandas as pd
 from sqlalchemy.orm import Session, joinedload
 
-from app.models.asset import Asset, AssetType
-from app.models.transaction import Transaction, TransactionType
+from app.database.types import utc_now
+from app.models.asset import AssetType
+from app.models.import_batch import ImportBatch, ImportBatchStatus
+from app.models.portfolio import CashEntry, CashEntryType, Portfolio, WatchlistItem
+from app.models.transaction import Transaction
+from app.services.portfolio_account_service import PortfolioAccountService
+from app.services.transaction_service import TransactionCommand, TransactionService
 from app.utils.logger import app_logger
 
-# Portföy dışa aktarımında seçilebilir tüm sütunlar (sıra korunur)
+WORKBOOK_SCHEMA_VERSION = "2"
 PORTFOLIO_EXPORT_COLUMNS = [
-    "Kod", "Ad", "Tür", "Adet", "Ort. Maliyet", "Güncel Fiyat",
-    "Toplam Maliyet", "Güncel Değer", "Toplam K/Z", "K/Z %", "Portföy %",
+    "Kod",
+    "Ad",
+    "Tür",
+    "Adet",
+    "Ort. Maliyet",
+    "Güncel Fiyat",
+    "Toplam Maliyet",
+    "Güncel Değer",
+    "Toplam K/Z",
+    "K/Z %",
+    "Portföy %",
 ]
+
+
+class ImportRowStatus(enum.Enum):
+    VALID = "Geçerli"
+    WARNING = "Uyarı"
+    DUPLICATE = "Mükerrer"
+    ERROR = "Hatalı"
+
+
+@dataclass
+class ImportPreviewRow:
+    sheet: str
+    row_number: int
+    entity: str
+    status: ImportRowStatus
+    data: dict[str, Any]
+    message: str = ""
+    selected: bool = True
+
+
+@dataclass
+class ImportPreview:
+    source_path: str
+    default_portfolio_id: int
+    rows: list[ImportPreviewRow] = field(default_factory=list)
+
+    @property
+    def has_errors(self) -> bool:
+        return any(row.status == ImportRowStatus.ERROR for row in self.rows)
+
+    @property
+    def selected_count(self) -> int:
+        return sum(row.selected for row in self.rows)
+
+
+@dataclass(frozen=True)
+class ImportBatchResult:
+    batch_id: int
+    imported_count: int
+
+
+class ImportValidationError(ValueError):
+    pass
+
+
+def _normalize_header(value: Any) -> str:
+    text = str(value).strip().casefold().replace("ı", "i")
+    text = "".join(
+        char for char in unicodedata.normalize("NFKD", text) if not unicodedata.combining(char)
+    )
+    return " ".join(text.replace("_", " ").split())
+
+
+def _decimal(value: Any, label: str) -> Decimal:
+    if pd.isna(value):
+        value = 0
+    try:
+        result = Decimal(str(value).replace(",", "."))
+    except Exception as exc:
+        raise ImportValidationError(f"{label} geçerli bir sayı değil.") from exc
+    if not result.is_finite():
+        raise ImportValidationError(f"{label} sonlu bir sayı olmalıdır.")
+    return result.quantize(Decimal("0.000001"))
+
+
+def _date(value: Any) -> datetime.date:
+    if isinstance(value, datetime.datetime):
+        return value.date()
+    if isinstance(value, datetime.date):
+        return value
+    try:
+        return pd.to_datetime(value, errors="raise").date()
+    except Exception as exc:
+        raise ImportValidationError("Tarih geçerli değil.") from exc
+
+
+def _value(row: dict[str, Any], *aliases: str, default=None):
+    normalized = {_normalize_header(key): value for key, value in row.items()}
+    for alias in aliases:
+        key = _normalize_header(alias)
+        if key in normalized:
+            return normalized[key]
+    return default
 
 
 class ImportExportService:
@@ -20,375 +126,533 @@ class ImportExportService:
     def export_excel(
         session: Session,
         file_path: str,
-        portfolio_items: Optional[List[Dict[str, Any]]] = None,
-        columns: Optional[List[str]] = None,
-    ):
-        """Portföyü ve işlem geçmişini Excel'e dışa aktarır.
-
-        Args:
-            portfolio_items: Güncel fiyat/değer içeren hesaplanmış liste
-                (PortfolioViewModel.cached_portfolio_data). Verilirse "Portföy"
-                sayfası güncel değerlerle yazılır; verilmezse varlık listesi yazılır.
-            columns: Portföy sayfasında yer alacak sütun adları (None => tümü).
-        """
+        portfolio_items: Optional[list[dict[str, Any]]] = None,
+        columns: Optional[list[str]] = None,
+        portfolio_id: Optional[int] = 1,
+    ) -> None:
+        """Seçili veya tüm portföyleri sürümlü workbook olarak dışa aktarır."""
         selected = columns or PORTFOLIO_EXPORT_COLUMNS
         portfolio_rows = []
+        for item in portfolio_items or []:
+            pnl = item.get("realized_pnl", 0) + item.get("unrealized_pnl", 0)
+            cost = item.get("total_cost", 0)
+            full = {
+                "Kod": item.get("code", ""),
+                "Ad": item.get("name", ""),
+                "Tür": item.get("type", ""),
+                "Adet": item.get("quantity", 0),
+                "Ort. Maliyet": item.get("avg_cost", 0),
+                "Güncel Fiyat": item.get("current_price", 0),
+                "Toplam Maliyet": cost,
+                "Güncel Değer": item.get("current_value", 0),
+                "Toplam K/Z": pnl,
+                "K/Z %": pnl / cost * 100 if cost else 0,
+                "Portföy %": item.get("portfolio_pct", 0),
+            }
+            portfolio_rows.append({key: full[key] for key in selected if key in full})
 
-        if portfolio_items:
-            for it in portfolio_items:
-                pnl = it.get("realized_pnl", 0) + it.get("unrealized_pnl", 0)
-                cost = it.get("total_cost", 0)
-                pnl_pct = (pnl / cost * 100) if cost else 0
-                full = {
-                    "Kod": it.get("code", ""),
-                    "Ad": it.get("name", ""),
-                    "Tür": it.get("type", ""),
-                    "Adet": it.get("quantity", 0),
-                    "Ort. Maliyet": it.get("avg_cost", 0),
-                    "Güncel Fiyat": it.get("current_price", 0),
-                    "Toplam Maliyet": cost,
-                    "Güncel Değer": it.get("current_value", 0),
-                    "Toplam K/Z": pnl,
-                    "K/Z %": pnl_pct,
-                    "Portföy %": it.get("portfolio_pct", 0),
-                }
-                portfolio_rows.append({c: full[c] for c in selected if c in full})
-        else:
-            # Fiyat verisi yoksa temel varlık listesi
-            for a in session.query(Asset).all():
-                full = {"Kod": a.code, "Ad": a.name, "Tür": a.asset_type.name}
-                portfolio_rows.append({c: full[c] for c in selected if c in full})
+        portfolios_query = session.query(Portfolio)
+        if portfolio_id is not None:
+            portfolios_query = portfolios_query.filter(Portfolio.id == portfolio_id)
+        portfolios = portfolios_query.order_by(Portfolio.id).all()
+        portfolio_names = {row.id: row.name for row in portfolios}
 
-        # İşlemler (her zaman tam)
-        tx_data = []
-        for tx in session.query(Transaction).options(joinedload(Transaction.asset)).all():
-            tx_data.append({
-                "Tarih": tx.date,
-                "Varlık Kodu": tx.asset.code if tx.asset else "",
-                "İşlem Türü": tx.transaction_type.name,
-                "Adet": float(tx.quantity),
-                "Birim Fiyat": float(tx.unit_price),
-                "Komisyon": float(tx.commission),
-                "Vergi": float(tx.tax),
-                "Not": tx.note,
-            })
+        tx_query = session.query(Transaction).options(
+            joinedload(Transaction.asset), joinedload(Transaction.portfolio)
+        )
+        cash_query = session.query(CashEntry).options(joinedload(CashEntry.portfolio))
+        watch_query = session.query(WatchlistItem).options(
+            joinedload(WatchlistItem.asset), joinedload(WatchlistItem.portfolio)
+        )
+        if portfolio_id is not None:
+            tx_query = tx_query.filter(Transaction.portfolio_id == portfolio_id)
+            cash_query = cash_query.filter(CashEntry.portfolio_id == portfolio_id)
+            watch_query = watch_query.filter(WatchlistItem.portfolio_id == portfolio_id)
 
-        with pd.ExcelWriter(file_path, engine='openpyxl') as writer:
-            pd.DataFrame(portfolio_rows).to_excel(writer, sheet_name='Portföy', index=False)
-            pd.DataFrame(tx_data).to_excel(writer, sheet_name='İşlemler', index=False)
+        tx_rows = [
+            {
+                "Portföy": row.portfolio.name,
+                "Tarih": row.date,
+                "Varlık Kodu": row.asset.code,
+                "Varlık Adı": row.asset.name,
+                "Varlık Türü": row.asset.asset_type.name,
+                "İşlem Türü": row.transaction_type.name,
+                "Adet": float(row.quantity),
+                "Birim Fiyat": float(row.unit_price),
+                "Komisyon": float(row.commission),
+                "Vergi": float(row.tax),
+                "Not": row.note or "",
+            }
+            for row in tx_query.order_by(Transaction.date, Transaction.id).all()
+        ]
+        cash_rows = [
+            {
+                "Portföy": row.portfolio.name,
+                "Tarih": row.date,
+                "Hareket Türü": row.entry_type.name,
+                "Tutar": float(row.amount),
+                "Not": row.note or "",
+            }
+            for row in cash_query.order_by(CashEntry.date, CashEntry.id).all()
+        ]
+        watch_rows = [
+            {
+                "Portföy": row.portfolio.name,
+                "Varlık Kodu": row.asset.code,
+                "Varlık Adı": row.asset.name,
+                "Varlık Türü": row.asset.asset_type.name,
+                "Hedef Fiyat": float(row.target_price) if row.target_price is not None else None,
+                "Not": row.note or "",
+            }
+            for row in watch_query.order_by(WatchlistItem.id).all()
+        ]
+        metadata = [
+            {"Anahtar": "schema_version", "Değer": WORKBOOK_SCHEMA_VERSION},
+            {"Anahtar": "exported_at_utc", "Değer": utc_now().isoformat()},
+        ]
 
-        app_logger.info(f"Exported data to {file_path}")
+        with pd.ExcelWriter(file_path, engine="openpyxl", datetime_format="yyyy-mm-dd") as writer:
+            pd.DataFrame(metadata).to_excel(writer, sheet_name="_Metadata", index=False)
+            pd.DataFrame(
+                [{"Portföy": row.name, "Varsayılan": bool(row.is_default)} for row in portfolios]
+            ).to_excel(writer, sheet_name="Portföyler", index=False)
+            pd.DataFrame(portfolio_rows).to_excel(writer, sheet_name="Portföy", index=False)
+            pd.DataFrame(tx_rows).to_excel(writer, sheet_name="İşlemler", index=False)
+            pd.DataFrame(cash_rows).to_excel(writer, sheet_name="Nakit", index=False)
+            pd.DataFrame(watch_rows).to_excel(writer, sheet_name="İzleme Listesi", index=False)
+        app_logger.info("Excel dışa aktarımı tamamlandı: %s", file_path)
 
     @staticmethod
-    def import_excel(session: Session, file_path: str) -> bool:
-        """Excel'den portföy veya işlem verisini içeri aktarır."""
+    def _transaction_fingerprints(session: Session) -> set[tuple]:
+        rows = session.query(Transaction).options(
+            joinedload(Transaction.asset), joinedload(Transaction.portfolio)
+        ).all()
+        return {
+            (
+                row.portfolio.name,
+                row.asset.code,
+                row.transaction_type.name,
+                row.date,
+                Decimal(str(row.quantity)).quantize(Decimal("0.000001")),
+                Decimal(str(row.unit_price)).quantize(Decimal("0.000001")),
+                Decimal(str(row.commission)).quantize(Decimal("0.000001")),
+                Decimal(str(row.tax)).quantize(Decimal("0.000001")),
+                row.note or "",
+            )
+            for row in rows
+        }
+
+    @staticmethod
+    def _transaction_preview_row(
+        session: Session,
+        sheet: str,
+        row_number: int,
+        raw: dict[str, Any],
+        default_portfolio_name: str,
+        fingerprints: set[tuple],
+        legacy_quantity_cost: bool = False,
+    ) -> ImportPreviewRow:
         try:
-            # Tüm sayfaları okuyup (dict) işlem yapmaya çalışalım
-            dfs = pd.read_excel(file_path, sheet_name=None)
+            code = str(_value(raw, "Varlık Kodu", "Kod", "Fon Kodu", default="")).strip().upper()
+            if not code or code == "NAN":
+                raise ImportValidationError("Varlık kodu boş olamaz.")
+            name = str(_value(raw, "Varlık Adı", "Ad", "Fon Adı", default=code)).strip() or code
+            portfolio_name = str(_value(raw, "Portföy", default=default_portfolio_name)).strip()
+            type_raw = str(_value(raw, "Varlık Türü", default="")).strip().upper()
+            warning = ""
+            if type_raw not in AssetType.__members__:
+                type_raw = "BIST" if 4 <= len(code) <= 5 else "TEFAS"
+                warning = "Varlık türü kod uzunluğundan tahmin edildi."
+            if legacy_quantity_cost:
+                kind = "BUY"
+                tx_date = datetime.date.today()
+                price_value = _value(raw, "Ortalama Maliyet", "Ort. Maliyet", "Maliyet")
+                note = "Excel Import - Toplu Maliyet"
+            else:
+                kind_raw = str(_value(raw, "İşlem Türü", "Tür", default="")).strip().upper()
+                kind = {
+                    "AL": "BUY",
+                    "ALIM": "BUY",
+                    "SAT": "SELL",
+                    "SATIM": "SELL",
+                    "TEMETTÜ": "DIVIDEND",
+                    "TEMETTU": "DIVIDEND",
+                    "BÖLÜNME": "SPLIT",
+                    "BOLUNME": "SPLIT",
+                }.get(kind_raw, kind_raw)
+                if kind not in {"BUY", "SELL", "DIVIDEND", "SPLIT"}:
+                    raise ImportValidationError("İşlem türü tanınmıyor.")
+                tx_date = _date(_value(raw, "Tarih"))
+                price_value = _value(raw, "Birim Fiyat", "Maliyet")
+                note = str(_value(raw, "Not", default="") or "").strip()
+            quantity = _decimal(_value(raw, "Adet", default=0), "Adet")
+            price = _decimal(price_value, "Birim fiyat")
+            commission = _decimal(_value(raw, "Komisyon", default=0), "Komisyon")
+            tax = _decimal(_value(raw, "Vergi", default=0), "Vergi")
+            fingerprint = (
+                portfolio_name,
+                code,
+                kind,
+                tx_date,
+                quantity,
+                price,
+                commission,
+                tax,
+                note,
+            )
+            duplicate = fingerprint in fingerprints
+            status = ImportRowStatus.DUPLICATE if duplicate else (
+                ImportRowStatus.WARNING if warning else ImportRowStatus.VALID
+            )
+            return ImportPreviewRow(
+                sheet,
+                row_number,
+                "transaction",
+                status,
+                {
+                    "portfolio_name": portfolio_name,
+                    "code": code,
+                    "name": name,
+                    "asset_type": type_raw,
+                    "transaction_type": kind,
+                    "date": tx_date,
+                    "quantity": quantity,
+                    "unit_price": price,
+                    "commission": commission,
+                    "tax": tax,
+                    "note": note,
+                },
+                message="Aynı işlem zaten kayıtlı." if duplicate else warning,
+                selected=not duplicate,
+            )
+        except Exception as exc:
+            return ImportPreviewRow(
+                sheet,
+                row_number,
+                "transaction",
+                ImportRowStatus.ERROR,
+                {},
+                message=str(exc),
+                selected=False,
+            )
 
-            success_any = False
-            for sheet_name, df in dfs.items():
-                cols = [str(c).lower() for c in df.columns]
+    @staticmethod
+    def preview_excel(session: Session, file_path: str, default_portfolio_id: int = 1) -> ImportPreview:
+        sheets = pd.read_excel(file_path, sheet_name=None)
+        default_portfolio = session.get(Portfolio, default_portfolio_id)
+        if default_portfolio is None:
+            raise ImportValidationError("Varsayılan portföy bulunamadı.")
+        preview = ImportPreview(str(file_path), default_portfolio_id)
+        fingerprints = ImportExportService._transaction_fingerprints(session)
+        has_transaction_sheet = any(_normalize_header(name) == "islemler" for name in sheets)
 
-                # Senaryo 3: Tam İşlem Geçmişi
-                if any("tarih" in c for c in cols) and any("kod" in c for c in cols) and any("tür" in c for c in cols):
-                    success_any = ImportExportService._process_full_transaction_history(session, df) or success_any
+        for sheet_name, frame in sheets.items():
+            normalized_sheet = _normalize_header(sheet_name)
+            columns = {_normalize_header(column) for column in frame.columns}
+            if normalized_sheet in {"metadata", "portfoyler"}:
+                continue
+            if normalized_sheet == "portfoy" and has_transaction_sheet:
+                continue
+            is_transaction = (
+                normalized_sheet == "islemler"
+                or ({"tarih", "adet"}.issubset(columns) and any("kod" in col for col in columns))
+            )
+            is_legacy_cost = (
+                not is_transaction
+                and "adet" in columns
+                and any("maliyet" in col for col in columns)
+                and any("kod" in col for col in columns)
+            )
+            if is_transaction or is_legacy_cost:
+                for offset, raw in enumerate(frame.to_dict("records"), start=2):
+                    preview.rows.append(
+                        ImportExportService._transaction_preview_row(
+                            session,
+                            sheet_name,
+                            offset,
+                            raw,
+                            default_portfolio.name,
+                            fingerprints,
+                            legacy_quantity_cost=is_legacy_cost,
+                        )
+                    )
+                continue
+            if normalized_sheet == "nakit":
+                for offset, raw in enumerate(frame.to_dict("records"), start=2):
+                    try:
+                        data = {
+                            "portfolio_name": str(
+                                _value(raw, "Portföy", default=default_portfolio.name)
+                            ).strip(),
+                            "date": _date(_value(raw, "Tarih")),
+                            "entry_type": str(_value(raw, "Hareket Türü")).strip().upper(),
+                            "amount": _decimal(_value(raw, "Tutar"), "Tutar"),
+                            "note": str(_value(raw, "Not", default="") or "").strip(),
+                        }
+                        if data["entry_type"] not in CashEntryType.__members__:
+                            raise ImportValidationError("Nakit hareket türü tanınmıyor.")
+                        preview.rows.append(
+                            ImportPreviewRow(
+                                sheet_name, offset, "cash", ImportRowStatus.VALID, data
+                            )
+                        )
+                    except Exception as exc:
+                        preview.rows.append(
+                            ImportPreviewRow(
+                                sheet_name,
+                                offset,
+                                "cash",
+                                ImportRowStatus.ERROR,
+                                {},
+                                str(exc),
+                                False,
+                            )
+                        )
+                continue
+            if normalized_sheet == "izleme listesi":
+                for offset, raw in enumerate(frame.to_dict("records"), start=2):
+                    try:
+                        code = str(_value(raw, "Varlık Kodu", "Kod")).strip().upper()
+                        if not code:
+                            raise ImportValidationError("Varlık kodu boş olamaz.")
+                        data = {
+                            "portfolio_name": str(
+                                _value(raw, "Portföy", default=default_portfolio.name)
+                            ).strip(),
+                            "code": code,
+                            "name": str(_value(raw, "Varlık Adı", default=code)).strip() or code,
+                            "asset_type": str(
+                                _value(raw, "Varlık Türü", default="BIST")
+                            ).strip().upper(),
+                            "target_price": _value(raw, "Hedef Fiyat"),
+                            "note": str(_value(raw, "Not", default="") or "").strip(),
+                        }
+                        preview.rows.append(
+                            ImportPreviewRow(
+                                sheet_name, offset, "watchlist", ImportRowStatus.VALID, data
+                            )
+                        )
+                    except Exception as exc:
+                        preview.rows.append(
+                            ImportPreviewRow(
+                                sheet_name,
+                                offset,
+                                "watchlist",
+                                ImportRowStatus.ERROR,
+                                {},
+                                str(exc),
+                                False,
+                            )
+                        )
+        if not preview.rows:
+            raise ImportValidationError("Uygun içe aktarma sayfası bulunamadı.")
+        return preview
 
-                # Senaryo 2: Adet + Maliyet
-                elif any("kod" in c for c in cols) and any("adet" in c for c in cols) and any("maliyet" in c for c in cols):
-                    success_any = ImportExportService._process_quantity_cost(session, df) or success_any
+    @staticmethod
+    def _portfolio_for_name(session: Session, name: str) -> Portfolio:
+        row = session.query(Portfolio).filter(Portfolio.name == name).first()
+        return row or PortfolioAccountService.create_portfolio(session, name)
 
-                # Kendi "Varlıklar" listemizse veya basit liste ("Fon Kodu", "Fon Adı") ise
-                elif any("kod" in c for c in cols) and any("ad" in c for c in cols):
-                    success_any = ImportExportService._process_assets_only(session, df) or success_any
+    @staticmethod
+    def apply_preview(
+        session: Session,
+        preview: ImportPreview,
+        selected_rows: Optional[Iterable[int]] = None,
+    ) -> ImportBatchResult:
+        if preview.has_errors:
+            raise ImportValidationError("Hatalı satırlar düzeltilmeden hiçbir kayıt aktarılamaz.")
+        selected_set = set(selected_rows) if selected_rows is not None else None
+        rows = [
+            row
+            for index, row in enumerate(preview.rows)
+            if (index in selected_set if selected_set is not None else row.selected)
+        ]
+        if not rows:
+            raise ImportValidationError("İçe aktarılacak satır seçilmedi.")
 
-                # Senaryo 1: Yüzdelik — ayrı akışla (toplam değer gerekir) ele alınır.
-                elif ImportExportService._is_percentage_cols(cols):
-                    continue
+        batch = ImportBatch(
+            portfolio_id=preview.default_portfolio_id,
+            source_name=Path(preview.source_path).name[:255],
+            source_type="EXCEL",
+            status=ImportBatchStatus.APPLIED,
+        )
+        session.add(batch)
+        session.flush()
 
-            if not success_any:
-                app_logger.error("Uygun sütun formatı hiçbir sayfada bulunamadı.")
-                return False
+        for row in rows:
+            data = row.data
+            portfolio = ImportExportService._portfolio_for_name(session, data["portfolio_name"])
+            if row.entity == "transaction":
+                asset = TransactionService.get_or_create_asset(
+                    session, data["code"], data["name"], data["asset_type"]
+                )
+                command = TransactionCommand.from_values(
+                    portfolio_id=portfolio.id,
+                    asset_id=asset.id,
+                    transaction_type=data["transaction_type"],
+                    date=data["date"],
+                    quantity=data["quantity"],
+                    unit_price=data["unit_price"],
+                    commission=data["commission"],
+                    tax=data["tax"],
+                    note=data["note"],
+                )
+                transaction = TransactionService.create(session, command)
+                transaction.import_batch_id = batch.id
+            elif row.entity == "cash":
+                entry = PortfolioAccountService.add_cash_entry(
+                    session,
+                    portfolio.id,
+                    data["entry_type"],
+                    data["date"],
+                    data["amount"],
+                    data["note"],
+                )
+                entry.import_batch_id = batch.id
+            elif row.entity == "watchlist":
+                asset = TransactionService.get_or_create_asset(
+                    session, data["code"], data["name"], data["asset_type"]
+                )
+                item = PortfolioAccountService.add_to_watchlist(
+                    session,
+                    portfolio.id,
+                    asset.id,
+                    data["target_price"],
+                    data["note"],
+                )
+                item.import_batch_id = batch.id
+        session.flush()
+        return ImportBatchResult(batch.id, len(rows))
 
+    @staticmethod
+    def import_excel(session: Session, file_path: str, portfolio_id: int = 1) -> bool:
+        """Uyumluluk yardımcısı; önizlemeyi yalnız hatasızsa tek transaction uygular."""
+        try:
+            preview = ImportExportService.preview_excel(session, file_path, portfolio_id)
+            ImportExportService.apply_preview(session, preview)
+            session.commit()
             return True
-
-        except Exception as e:
-            app_logger.error(f"Import error: {e}")
+        except Exception as exc:
+            session.rollback()
+            app_logger.error("Excel içe aktarma başarısız: %s", exc)
             return False
 
     @staticmethod
-    def _is_percentage_cols(cols) -> bool:
-        """Sütunlar 'kod + yüzde' yüzdelik senaryosuna mı uyuyor?"""
-        has_code = any("kod" in c for c in cols)
-        has_pct = any(("yüzde" in c) or ("yuzde" in c) or ("%" in c) or ("oran" in c) for c in cols)
-        # Diğer senaryoların belirleyici sütunları yoksa yüzdeliktir
-        has_other = any(("tarih" in c) or ("adet" in c) or ("maliyet" in c) for c in cols)
-        return has_code and has_pct and not has_other
+    def undo_last_import(session: Session, portfolio_id: Optional[int] = None) -> int:
+        query = session.query(ImportBatch).filter(ImportBatch.status == ImportBatchStatus.APPLIED)
+        if portfolio_id is not None:
+            query = query.filter(ImportBatch.portfolio_id == portfolio_id)
+        batch = query.order_by(ImportBatch.created_at.desc(), ImportBatch.id.desc()).first()
+        if batch is None:
+            raise ImportValidationError("Geri alınabilecek bir içe aktarım bulunamadı.")
+
+        transactions = (
+            session.query(Transaction)
+            .filter(Transaction.import_batch_id == batch.id)
+            .order_by(Transaction.date.desc(), Transaction.id.desc())
+            .all()
+        )
+        count = 0
+        for transaction in transactions:
+            TransactionService.delete(session, transaction.id)
+            count += 1
+        for model in (CashEntry, WatchlistItem):
+            rows = session.query(model).filter(model.import_batch_id == batch.id).all()
+            count += len(rows)
+            for row in rows:
+                session.delete(row)
+        batch.status = ImportBatchStatus.UNDONE
+        batch.undone_at = utc_now()
+        session.flush()
+        return count
+
+    @staticmethod
+    def _is_percentage_cols(columns) -> bool:
+        normalized = {_normalize_header(column) for column in columns}
+        has_code = any("kod" in column for column in normalized)
+        has_percentage = any(
+            token in column for column in normalized for token in ("yuzde", "%", "oran")
+        )
+        has_other = any(
+            token in column for column in normalized for token in ("tarih", "adet", "maliyet")
+        )
+        return has_code and has_percentage and not has_other
 
     @staticmethod
     def detect_percentage(file_path: str) -> bool:
-        """Dosyada (herhangi bir sayfada) yüzdelik senaryo var mı kontrol eder."""
         try:
-            dfs = pd.read_excel(file_path, sheet_name=None)
-            for _, df in dfs.items():
-                cols = [str(c).lower() for c in df.columns]
-                if ImportExportService._is_percentage_cols(cols):
-                    return True
-        except Exception as e:
-            app_logger.error(f"Yüzdelik tespiti hatası: {e}")
-        return False
+            return any(
+                ImportExportService._is_percentage_cols(frame.columns)
+                for frame in pd.read_excel(file_path, sheet_name=None).values()
+            )
+        except Exception as exc:
+            app_logger.error("Yüzdelik tespiti başarısız: %s", exc)
+            return False
 
     @staticmethod
-    def import_percentage(session: Session, file_path: str, total_value: float) -> bool:
-        """Yüzdelik portföyü içeri aktarır.
-
-        Her satır için adet, (toplam_değer * yüzde/100) / güncel_fiyat olarak
-        hesaplanır. Güncel fiyat çekilemezse birim fiyat=hedef tutar, adet=1
-        olarak kaydedilir (değer doğru kalır, adet nominal olur).
-        """
+    def import_percentage(
+        session: Session,
+        file_path: str,
+        total_value: float,
+        portfolio_id: int = 1,
+    ) -> bool:
+        """Fiyatı bulunamayan tek satırda dahi tamamını rollback eder."""
         from app.services.bist_service import BistService
         from app.services.tefas_service import TefasService
 
         try:
-            dfs = pd.read_excel(file_path, sheet_name=None)
+            pending = []
             bist = BistService()
             tefas = TefasService()
-            any_added = False
-
-            for _, df in dfs.items():
-                cols = [str(c).lower() for c in df.columns]
-                if not ImportExportService._is_percentage_cols(cols):
+            for frame in pd.read_excel(file_path, sheet_name=None).values():
+                if not ImportExportService._is_percentage_cols(frame.columns):
                     continue
-
-                # Kod ve yüzde sütunlarını bul
-                code_col = next((c for c in df.columns if "kod" in str(c).lower()), None)
-                pct_col = next((c for c in df.columns
-                                if any(k in str(c).lower() for k in ("yüzde", "yuzde", "%", "oran"))), None)
-                if code_col is None or pct_col is None:
-                    continue
-
-                for _, row in df.iterrows():
-                    raw_code = row.get(code_col)
-                    if pd.isna(raw_code):
-                        continue
-                    code = str(raw_code).strip().upper()
-                    if not code or code == "NAN":
-                        continue
-                    try:
-                        pct = float(row.get(pct_col))
-                    except (TypeError, ValueError):
-                        continue
-                    if pct <= 0:
-                        continue
-
-                    asset = session.query(Asset).filter_by(code=code).first()
-                    if not asset:
-                        a_type = AssetType.BIST if len(code) >= 4 else AssetType.TEFAS
-                        asset = Asset(code=code, name=code, asset_type=a_type)
-                        session.add(asset)
-                        session.flush()
-
-                    target_value = total_value * pct / 100.0
-                    if asset.asset_type == AssetType.BIST:
-                        price = bist.fetch_current_price(code)
-                    else:
-                        price = tefas.fetch_current_price(code)
-
-                    if price and price > 0:
-                        quantity = target_value / price
-                        unit_price = price
-                        note = "Excel Import - Yüzdelik"
-                    else:
-                        quantity = 1.0
-                        unit_price = target_value
-                        note = "Excel Import - Yüzdelik (fiyat alınamadı, adet nominal)"
-
-                    session.add(Transaction(
+                for raw in frame.to_dict("records"):
+                    code = str(_value(raw, "Kod", "Varlık Kodu", default="")).strip().upper()
+                    percentage = _decimal(
+                        _value(raw, "Yüzde", "Yuzde", "%", "Oran"), "Yüzde"
+                    )
+                    if not code or percentage <= 0:
+                        raise ImportValidationError("Kod ve yüzde pozitif olmalıdır.")
+                    asset_type = AssetType.BIST if 4 <= len(code) <= 5 else AssetType.TEFAS
+                    price = (
+                        bist.fetch_current_price(code)
+                        if asset_type == AssetType.BIST
+                        else tefas.fetch_current_price(code)
+                    )
+                    if price is None or price <= 0:
+                        raise ImportValidationError(f"{code} fiyatı alınamadı; aktarım durduruldu.")
+                    target = Decimal(str(total_value)) * percentage / Decimal("100")
+                    pending.append((code, asset_type, target / Decimal(str(price)), Decimal(str(price))))
+            if not pending:
+                raise ImportValidationError("Yüzdelik satır bulunamadı.")
+            batch = ImportBatch(
+                portfolio_id=portfolio_id,
+                source_name=Path(file_path).name[:255],
+                source_type="PERCENTAGE",
+            )
+            session.add(batch)
+            session.flush()
+            for code, asset_type, quantity, price in pending:
+                asset = TransactionService.get_or_create_asset(
+                    session, code, code, asset_type
+                )
+                transaction = TransactionService.create(
+                    session,
+                    TransactionCommand.from_values(
+                        portfolio_id=portfolio_id,
                         asset_id=asset.id,
-                        transaction_type=TransactionType.BUY,
+                        transaction_type="BUY",
                         date=datetime.date.today(),
                         quantity=quantity,
-                        unit_price=unit_price,
-                        commission=0,
-                        tax=0,
-                        note=note,
-                    ))
-                    any_added = True
-
-            if any_added:
-                session.commit()
-            return any_added
-        except Exception as e:
-            app_logger.error(f"Yüzdelik import hatası: {e}")
-            session.rollback()
-            return False
-
-    @staticmethod
-    def _ensure_assets_exist(session: Session, codes_and_names: dict) -> dict:
-        """Varlıkları toplu olarak sorgular ve olmayanları toplu olarak oluşturur (N+1 query optimizasyonu).
-        codes_and_names: dict of {code: name}
-        Returns a dict of {code: Asset}
-        """
-        if not codes_and_names:
-            return {}
-
-        codes = list(codes_and_names.keys())
-        existing_assets = session.query(Asset).filter(Asset.code.in_(codes)).all()
-        asset_map = {a.code: a for a in existing_assets}
-
-        new_assets = []
-        for code, name in codes_and_names.items():
-            if code not in asset_map:
-                a_type = AssetType.BIST if len(code) >= 4 and len(code) <= 5 else AssetType.TEFAS
-                asset = Asset(code=code, name=name, asset_type=a_type)
-                new_assets.append(asset)
-                asset_map[code] = asset
-
-        if new_assets:
-            session.add_all(new_assets)
-            session.flush() # To get IDs for new assets
-
-        return asset_map
-
-    @staticmethod
-    def _process_full_transaction_history(session: Session, df: pd.DataFrame) -> bool:
-        records = df.to_dict('records')
-        codes_and_names = {}
-        valid_records = []
-
-        for row in records:
-            code = str(row.get("Kod", row.get("kod", ""))).strip().upper()
-            if pd.isna(code) or not code or code == 'NAN':
-                continue
-            codes_and_names[code] = code  # varsayılan ad kodun kendisi
-            valid_records.append((code, row))
-
-        if not valid_records:
-            return True
-
-        asset_map = ImportExportService._ensure_assets_exist(session, codes_and_names)
-
-        transactions = []
-        for code, row in valid_records:
-            asset = asset_map[code]
-            ttype_str = str(row.get("Tür", row.get("tür", ""))).strip().upper()
-            ttype = TransactionType.BUY if ttype_str in ["BUY", "AL", "ALIM"] else TransactionType.SELL
-
-            tx = Transaction(
-                asset_id=asset.id,
-                transaction_type=ttype,
-                date=row.get("Tarih", row.get("tarih", datetime.date.today())),
-                quantity=row.get("Adet", row.get("adet", 0)),
-                unit_price=row.get("Birim Fiyat", row.get("maliyet", 0)),
-                commission=row.get("Komisyon", 0),
-                tax=row.get("Vergi", 0)
-            )
-            transactions.append(tx)
-
-        if transactions:
-            session.add_all(transactions)
-        session.commit()
-        return True
-
-    @staticmethod
-    def _process_quantity_cost(session: Session, df: pd.DataFrame) -> bool:
-        """Adet ve Ortalama Maliyet verilirse, tek bir sanal BUY işlemi olarak eklenecek."""
-        records = df.to_dict('records')
-        codes_and_names = {}
-        valid_records = []
-
-        for row in records:
-            code = str(row.get("Kod", row.get("kod", ""))).strip().upper()
-            if pd.isna(code) or not code or code == 'NAN':
-                continue
-            codes_and_names[code] = code
-            valid_records.append((code, row))
-
-        if not valid_records:
-            return True
-
-        asset_map = ImportExportService._ensure_assets_exist(session, codes_and_names)
-
-        transactions = []
-        for code, row in valid_records:
-            asset = asset_map[code]
-            tx = Transaction(
-                asset_id=asset.id,
-                transaction_type=TransactionType.BUY,
-                date=datetime.date.today(),
-                quantity=row.get("Adet", row.get("adet", 0)),
-                unit_price=row.get("Ortalama Maliyet", row.get("maliyet", row.get("ortalama_maliyet", 0))),
-                commission=0,
-                tax=0,
-                note="Excel Import - Toplu Maliyet"
-            )
-            transactions.append(tx)
-
-        if transactions:
-            session.add_all(transactions)
-        session.commit()
-        return True
-
-    @staticmethod
-    def _process_assets_only(session: Session, df: pd.DataFrame) -> bool:
-        """Sadece varlık listesi (Kod, Ad) ve isteğe bağlı Tutar ekler."""
-        kod_col, ad_col, tutar_col = None, None, None
-        for col in df.columns:
-            c_lower = str(col).lower()
-            if "kod" in c_lower:
-                kod_col = col
-            elif "ad" in c_lower and "soyad" not in c_lower:
-                ad_col = col
-            elif "tutar" in c_lower or "maliyet" in c_lower:
-                tutar_col = col
-
-        records = df.to_dict('records')
-        codes_and_names = {}
-        valid_records = []
-
-        for row in records:
-            code = str(row[kod_col]).strip().upper() if kod_col and pd.notna(row.get(kod_col)) else None
-            if not code or pd.isna(code) or code == 'NAN':
-                continue
-
-            name = str(row[ad_col]).strip() if ad_col and pd.notna(row.get(ad_col)) else None
-            if not name or pd.isna(name) or name == 'NAN':
-                name = code
-
-            tutar = 0.0
-            if tutar_col and pd.notna(row.get(tutar_col)):
-                try:
-                    tutar = float(row[tutar_col])
-                except ValueError:
-                    pass
-
-            codes_and_names[code] = name
-            valid_records.append((code, tutar))
-
-        if not valid_records:
-            return True
-
-        asset_map = ImportExportService._ensure_assets_exist(session, codes_and_names)
-
-        transactions = []
-        for code, tutar in valid_records:
-            asset = asset_map[code]
-
-            # Eğer Tutar doldurulmuşsa bunu bir BUY işlemi olarak atalım (Miktar 1 birim)
-            if tutar > 0 and not pd.isna(tutar):
-                tx = Transaction(
-                    asset_id=asset.id,
-                    transaction_type=TransactionType.BUY,
-                    date=datetime.date.today(),
-                    quantity=1.0,
-                    unit_price=tutar,
-                    commission=0,
-                    tax=0,
-                    note="Excel Import - Tutar (Toplu)"
+                        unit_price=price,
+                        note="Excel Import - Yüzdelik",
+                    ),
                 )
-                transactions.append(tx)
-
-        if transactions:
-            session.add_all(transactions)
-        session.commit()
-        return True
+                transaction.import_batch_id = batch.id
+            session.commit()
+            return True
+        except Exception as exc:
+            session.rollback()
+            app_logger.error("Yüzdelik içe aktarım başarısız: %s", exc)
+            return False

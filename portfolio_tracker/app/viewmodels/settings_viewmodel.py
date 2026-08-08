@@ -22,6 +22,7 @@ class SettingsViewModel(QObject):
     data_wiped = Signal()
     data_changed = Signal()                 # import sonrası portföyü tazele
     percentage_import_needed = Signal(str)  # (dosya yolu) — toplam değer sorulmalı
+    import_preview_ready = Signal(object)
 
     # Yapay zeka anahtarları dahil tüm varsayılanlar app_settings'te tutulur
     default_settings = DEFAULT_SETTINGS
@@ -58,17 +59,23 @@ class SettingsViewModel(QObject):
         except Exception as e:
             self.error_occurred.emit(str(e))
 
-    def export_data(self, file_path: str, columns=None, portfolio_items=None):
+    def export_data(
+        self, file_path: str, columns=None, portfolio_items=None, portfolio_id=1
+    ):
         try:
             with get_session() as session:
                 ImportExportService.export_excel(
-                    session, file_path, portfolio_items=portfolio_items, columns=columns
+                    session,
+                    file_path,
+                    portfolio_items=portfolio_items,
+                    columns=columns,
+                    portfolio_id=portfolio_id,
                 )
             self.success_message.emit("Dışa aktarma işlemi başarıyla tamamlandı.")
         except Exception as e:
             self.error_occurred.emit(f"Dışa aktarma hatası: {str(e)}")
 
-    def import_data(self, file_path: str):
+    def import_data(self, file_path: str, portfolio_id: int = 1):
         # Yüzdelik senaryosu toplam değer gerektirir; view'a sinyal gönderilir.
         try:
             if ImportExportService.detect_percentage(file_path):
@@ -80,19 +87,41 @@ class SettingsViewModel(QObject):
 
         try:
             with get_session() as session:
-                success = ImportExportService.import_excel(session, file_path)
-            if success:
-                self.success_message.emit("İçeri aktarma işlemi başarıyla tamamlandı.")
-                self.data_changed.emit()
-            else:
-                self.error_occurred.emit("İçeri aktarma sırasında uygun veri formatı bulunamadı.")
+                preview = ImportExportService.preview_excel(session, file_path, portfolio_id)
+            self.import_preview_ready.emit(preview)
+        except Exception as e:
+            self.error_occurred.emit(f"İçeri aktarma önizleme hatası: {str(e)}")
+
+    def apply_import_preview(self, preview, selected_rows):
+        try:
+            with get_session() as session:
+                with session.begin():
+                    result = ImportExportService.apply_preview(
+                        session, preview, selected_rows
+                    )
+            self.success_message.emit(
+                f"{result.imported_count} kayıt içe aktarıldı. Batch: {result.batch_id}"
+            )
+            self.data_changed.emit()
         except Exception as e:
             self.error_occurred.emit(f"İçeri aktarma hatası: {str(e)}")
 
-    def import_percentage(self, file_path: str, total_value: float):
+    def undo_last_import(self, portfolio_id=None):
         try:
             with get_session() as session:
-                success = ImportExportService.import_percentage(session, file_path, total_value)
+                with session.begin():
+                    count = ImportExportService.undo_last_import(session, portfolio_id)
+            self.success_message.emit(f"Son içe aktarım geri alındı ({count} kayıt).")
+            self.data_changed.emit()
+        except Exception as e:
+            self.error_occurred.emit(f"İçe aktarım geri alınamadı: {str(e)}")
+
+    def import_percentage(self, file_path: str, total_value: float, portfolio_id: int = 1):
+        try:
+            with get_session() as session:
+                success = ImportExportService.import_percentage(
+                    session, file_path, total_value, portfolio_id
+                )
             if success:
                 self.success_message.emit("Yüzdelik portföy başarıyla içeri aktarıldı.")
                 self.data_changed.emit()

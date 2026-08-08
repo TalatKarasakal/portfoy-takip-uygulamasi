@@ -41,8 +41,10 @@ class CashEntry(Base):
     amount = Column(Numeric(18, 6), nullable=False)
     note = Column(String(500), nullable=True)
     created_at = Column(UTCDateTime, nullable=False, default=utc_now)
+    import_batch_id = Column(Integer, ForeignKey("import_batches.id"), nullable=True)
 
     portfolio = relationship("Portfolio", back_populates="cash_entries")
+    import_batch = relationship("ImportBatch", back_populates="cash_entries")
 
 
 class WatchlistItem(Base):
@@ -57,6 +59,8 @@ class WatchlistItem(Base):
     target_price = Column(Numeric(18, 6), nullable=True)
     note = Column(String(500), nullable=True)
     created_at = Column(UTCDateTime, nullable=False, default=utc_now)
+    import_batch_id = Column(Integer, ForeignKey("import_batches.id"), nullable=True)
 
     portfolio = relationship("Portfolio", back_populates="watchlist_items")
     asset = relationship("Asset")
+    import_batch = relationship("ImportBatch", back_populates="watchlist_items")

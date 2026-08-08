@@ -9,6 +9,7 @@ konfigürasyonu "failed to locate a name" hatasıyla başarısız olur.
 
 from app.models.alert import Alert, AlertType
 from app.models.asset import Asset, AssetType
+from app.models.import_batch import ImportBatch, ImportBatchStatus
 from app.models.portfolio import CashEntry, CashEntryType, Portfolio, WatchlistItem
 from app.models.portfolio_snapshot import PortfolioSnapshot
 from app.models.price_history import PriceHistory
@@ -29,4 +30,6 @@ __all__ = [
     "Alert",
     "AlertType",
     "Settings",
+    "ImportBatch",
+    "ImportBatchStatus",
 ]

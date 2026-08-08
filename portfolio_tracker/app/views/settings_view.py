@@ -5,21 +5,25 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDialog,
+    QDialogButtonBox,
     QFileDialog,
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
+    QHeaderView,
     QInputDialog,
     QLabel,
     QLineEdit,
     QMessageBox,
     QPushButton,
     QScrollArea,
+    QTableWidget,
+    QTableWidgetItem,
     QVBoxLayout,
     QWidget,
 )
 
-from app.services.import_export_service import PORTFOLIO_EXPORT_COLUMNS
+from app.services.import_export_service import PORTFOLIO_EXPORT_COLUMNS, ImportRowStatus
 
 APP_VERSION = "1.0.0"
 
@@ -60,6 +64,50 @@ class ExportColumnsDialog(QDialog):
 
     def selected_columns(self):
         return [c for c, cb in self.checks.items() if cb.isChecked()]
+
+
+class ImportPreviewDialog(QDialog):
+    """Satır durumlarını ve mükerrer seçimlerini gösteren güvenli önizleme."""
+
+    def __init__(self, preview, parent=None):
+        super().__init__(parent)
+        self.preview = preview
+        self.setWindowTitle("İçe Aktarma Önizlemesi")
+        self.resize(900, 520)
+        layout = QVBoxLayout(self)
+        info = QLabel(
+            "Hatalı satırlar varken aktarım yapılamaz. Mükerrer satırlar varsayılan olarak seçilmez."
+        )
+        info.setWordWrap(True)
+        layout.addWidget(info)
+        self.table = QTableWidget(len(preview.rows), 6)
+        self.table.setHorizontalHeaderLabels(
+            ["Seç", "Durum", "Sayfa", "Satır", "Kayıt", "Açıklama"]
+        )
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self._checks = []
+        for index, row in enumerate(preview.rows):
+            checkbox = QCheckBox()
+            checkbox.setChecked(row.selected)
+            checkbox.setEnabled(row.status != ImportRowStatus.ERROR)
+            self._checks.append(checkbox)
+            self.table.setCellWidget(index, 0, checkbox)
+            self.table.setItem(index, 1, QTableWidgetItem(row.status.value))
+            self.table.setItem(index, 2, QTableWidgetItem(row.sheet))
+            self.table.setItem(index, 3, QTableWidgetItem(str(row.row_number)))
+            summary = row.data.get("code") or row.data.get("entry_type") or row.entity
+            self.table.setItem(index, 4, QTableWidgetItem(str(summary)))
+            self.table.setItem(index, 5, QTableWidgetItem(row.message))
+        layout.addWidget(self.table)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.button(QDialogButtonBox.Ok).setText("Seçilenleri İçe Aktar")
+        buttons.button(QDialogButtonBox.Ok).setEnabled(not preview.has_errors)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def selected_rows(self):
+        return [index for index, checkbox in enumerate(self._checks) if checkbox.isChecked()]
 
 
 class SettingsView(QWidget):
@@ -173,15 +221,18 @@ class SettingsView(QWidget):
         self.btn_restore = QPushButton("Yedekten Dön")
         self.btn_export = QPushButton("Excel'e Aktar")
         self.btn_import = QPushButton("Yükle")
+        self.btn_undo_import = QPushButton("Son Aktarımı Geri Al")
 
         self.btn_backup.clicked.connect(self.on_backup_clicked)
         self.btn_restore.clicked.connect(self.on_restore_clicked)
         self.btn_export.clicked.connect(self.on_export_clicked)
         self.btn_import.clicked.connect(self.on_import_clicked)
+        self.btn_undo_import.clicked.connect(self.on_undo_import_clicked)
 
         for b in (self.btn_backup, self.btn_restore, self.btn_export, self.btn_import):
             data_layout.addWidget(b)
         data_v.addLayout(data_layout)
+        data_v.addWidget(self.btn_undo_import)
 
         self.btn_cashflow = QPushButton("Aylık Nakit Akışı Raporu (Excel)")
         self.btn_cashflow.clicked.connect(self.on_cashflow_clicked)
@@ -217,6 +268,7 @@ class SettingsView(QWidget):
         self.view_model.success_message.connect(self.on_success)
         self.view_model.error_occurred.connect(self.on_error)
         self.view_model.percentage_import_needed.connect(self.on_percentage_import_needed)
+        self.view_model.import_preview_ready.connect(self.on_import_preview_ready)
         # Not: load_settings() MainWindow tarafından kurulum tamamlandıktan sonra
         # çağrılır; burada çağırmak view'lar/timer hazır olmadan sinyal tetikler.
 
@@ -346,12 +398,30 @@ class SettingsView(QWidget):
         path, _ = QFileDialog.getSaveFileName(self, "Excel'e Aktar", "portfoy.xlsx", "Excel (*.xlsx)")
         if path:
             items = self.portfolio_vm.cached_portfolio_data if self.portfolio_vm else None
-            self.view_model.export_data(path, columns=columns, portfolio_items=items)
+            self.view_model.export_data(
+                path,
+                columns=columns,
+                portfolio_items=items,
+                portfolio_id=self.portfolio_vm.selected_portfolio_id if self.portfolio_vm else 1,
+            )
 
     def on_import_clicked(self):
         path, _ = QFileDialog.getOpenFileName(self, "Excel Seç", "", "Excel (*.xlsx)")
         if path:
-            self.view_model.import_data(path)
+            portfolio_id = self.portfolio_vm.selected_portfolio_id if self.portfolio_vm else 1
+            if portfolio_id is None:
+                QMessageBox.warning(self, "Portföy Seçin", "İçe aktarmak için belirli bir portföy seçin.")
+                return
+            self.view_model.import_data(path, portfolio_id)
+
+    def on_import_preview_ready(self, preview):
+        dialog = ImportPreviewDialog(preview, self)
+        if dialog.exec():
+            self.view_model.apply_import_preview(preview, dialog.selected_rows())
+
+    def on_undo_import_clicked(self):
+        portfolio_id = self.portfolio_vm.selected_portfolio_id if self.portfolio_vm else 1
+        self.view_model.undo_last_import(portfolio_id)
 
     def on_percentage_import_needed(self, path):
         total, ok = QInputDialog.getDouble(
@@ -364,7 +434,8 @@ class SettingsView(QWidget):
         # Güncel fiyat çekimi sürebilir; bekleme imleci göster
         QApplication.setOverrideCursor(QCursor(Qt.WaitCursor))
         try:
-            self.view_model.import_percentage(path, total)
+            portfolio_id = self.portfolio_vm.selected_portfolio_id if self.portfolio_vm else 1
+            self.view_model.import_percentage(path, total, portfolio_id or 1)
         finally:
             QApplication.restoreOverrideCursor()
 
