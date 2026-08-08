@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
 )
 
 from app.utils.display import display
+from app.utils.formatters import format_decimal
 from app.views.widgets.table_filter import TableFilterProxyModel
 
 BUY_COLOR = QColor("#00B5E2")
@@ -49,7 +50,7 @@ class TransactionTableModel(QAbstractTableModel):
             if col == self.COL_DATE: return row.get("date", "")
             elif col == self.COL_ASSET: return row.get("asset_code", "")
             elif col == self.COL_TYPE: return TYPE_LABELS.get(row.get("type"), row.get("type", ""))
-            elif col == self.COL_QTY: return f"{row.get('quantity', 0):,.2f}"
+            elif col == self.COL_QTY: return format_decimal(row.get("quantity", 0))
             elif col == self.COL_PRICE: return display.format(row.get("unit_price", 0))
             elif col == self.COL_COMM: return display.format(row.get("commission", 0))
             elif col == self.COL_TAX: return display.format(row.get("tax", 0))

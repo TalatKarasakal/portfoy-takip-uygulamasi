@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
 )
 
 from app.utils.display import display
-from app.utils.formatters import format_percent
+from app.utils.formatters import format_decimal, format_percent
 from app.views.transactions_view import AddTransactionDialog
 from app.views.widgets.asset_chart_dialog import AssetChartDialog
 from app.views.widgets.table_filter import TableFilterProxyModel
@@ -53,7 +53,7 @@ class PortfolioTableModel(QAbstractTableModel):
             elif col == self.COL_CODE: return row.get("code", "")
             elif col == self.COL_NAME: return row.get("name", "")
             elif col == self.COL_TYPE: return row.get("type", "")
-            elif col == self.COL_QTY: return f"{row.get('quantity', 0):,.2f}"
+            elif col == self.COL_QTY: return format_decimal(row.get("quantity", 0))
             elif col == self.COL_AVG: return display.format(row.get("avg_cost", 0))
             elif col == self.COL_PRICE: return display.format(row.get("current_price", 0))
             elif col == self.COL_TOTCOST: return display.format(row.get("total_cost", 0))
@@ -275,11 +275,14 @@ class PortfolioView(QWidget):
     def on_kpi_updated(self, kpi_data):
         stale = kpi_data.get("stale_codes", [])
         failed = kpi_data.get("failed_codes", [])
+        invalid = kpi_data.get("invalid_codes", [])
         parts = []
         if stale:
             parts.append(f"⚠ Son bilinen fiyat kullanılıyor: {', '.join(stale)}")
         if failed:
             parts.append(f"⛔ Fiyatı alınamadı: {', '.join(failed)}")
+        if invalid:
+            parts.append(f"⛔ Veri düzeltmesi gerekli: {'; '.join(invalid)}")
         self.warning_label.setText("   ".join(parts))
         self.warning_label.setVisible(bool(parts))
 

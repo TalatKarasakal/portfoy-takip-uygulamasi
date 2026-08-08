@@ -4,6 +4,7 @@ from sqlalchemy.orm import joinedload
 from app.database.session import get_session
 from app.models.asset import Asset
 from app.models.transaction import Transaction, TransactionType
+from app.services.transaction_service import TransactionCommand, TransactionService
 from app.utils.logger import app_logger
 
 
@@ -12,12 +13,25 @@ class TransactionViewModel(QObject):
     action_success = Signal(str)
     action_failed = Signal(str)
 
+    def __init__(self):
+        super().__init__()
+        self.selected_portfolio_id = 1
+
+    def set_portfolio(self, portfolio_id):
+        self.selected_portfolio_id = int(portfolio_id) if portfolio_id is not None else None
+        self.load_transactions()
+
     def load_transactions(self):
         try:
             with get_session() as session:
                 txs = (
                     session.query(Transaction)
                     .options(joinedload(Transaction.asset))
+                    .filter(
+                        True
+                        if self.selected_portfolio_id is None
+                        else Transaction.portfolio_id == self.selected_portfolio_id
+                    )
                     .order_by(Transaction.date.desc(), Transaction.id.desc())
                     .all()
                 )
@@ -33,6 +47,7 @@ class TransactionViewModel(QObject):
                         total = gross - fees
                     result.append({
                         "id": tx.id,
+                        "portfolio_id": tx.portfolio_id,
                         "asset_id": tx.asset_id,
                         "date": tx.date.strftime("%Y-%m-%d"),
                         "date_obj": tx.date,
@@ -52,10 +67,13 @@ class TransactionViewModel(QObject):
 
     def add_transaction(self, asset_id, tx_type, date, quantity, unit_price, commission, tax, note):
         try:
+            if self.selected_portfolio_id is None:
+                raise ValueError("İşlem eklemek için belirli bir portföy seçin.")
             with get_session() as session:
-                tx = Transaction(
+                command = TransactionCommand.from_values(
+                    portfolio_id=self.selected_portfolio_id,
                     asset_id=asset_id,
-                    transaction_type=TransactionType[tx_type],
+                    transaction_type=tx_type,
                     date=date,
                     quantity=quantity,
                     unit_price=unit_price,
@@ -63,8 +81,8 @@ class TransactionViewModel(QObject):
                     tax=tax,
                     note=note,
                 )
-                session.add(tx)
-                session.commit()
+                with session.begin():
+                    TransactionService.create(session, command)
             self.action_success.emit("İşlem başarıyla eklendi.")
             self.load_transactions()
         except Exception as e:
@@ -73,18 +91,22 @@ class TransactionViewModel(QObject):
 
     def update_transaction(self, tx_id, asset_id, tx_type, date, quantity, unit_price, commission, tax, note):
         try:
+            if self.selected_portfolio_id is None:
+                raise ValueError("İşlem güncellemek için belirli bir portföy seçin.")
             with get_session() as session:
-                tx = session.query(Transaction).filter_by(id=tx_id).first()
-                if tx:
-                    tx.asset_id = asset_id
-                    tx.transaction_type = TransactionType[tx_type]
-                    tx.date = date
-                    tx.quantity = quantity
-                    tx.unit_price = unit_price
-                    tx.commission = commission
-                    tx.tax = tax
-                    tx.note = note
-                    session.commit()
+                command = TransactionCommand.from_values(
+                    portfolio_id=self.selected_portfolio_id,
+                    asset_id=asset_id,
+                    transaction_type=tx_type,
+                    date=date,
+                    quantity=quantity,
+                    unit_price=unit_price,
+                    commission=commission,
+                    tax=tax,
+                    note=note,
+                )
+                with session.begin():
+                    TransactionService.update(session, tx_id, command)
             self.action_success.emit("İşlem güncellendi.")
             self.load_transactions()
         except Exception as e:
@@ -94,10 +116,8 @@ class TransactionViewModel(QObject):
     def delete_transaction(self, tx_id):
         try:
             with get_session() as session:
-                tx = session.query(Transaction).filter_by(id=tx_id).first()
-                if tx:
-                    session.delete(tx)
-                    session.commit()
+                with session.begin():
+                    TransactionService.delete(session, tx_id)
             self.action_success.emit("İşlem silindi.")
             self.load_transactions()
         except Exception as e:

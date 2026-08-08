@@ -133,6 +133,8 @@ class MainWindow(QMainWindow):
         self.settings_vm.data_changed.connect(lambda: self.portfolio_vm.load_data())
         self.alerts_vm.alert_triggered.connect(self._on_alert_triggered)
         self.portfolio_vm.portfolios_loaded.connect(self._on_portfolios_loaded)
+        self.portfolio_vm.portfolio_selection_changed.connect(self.transaction_vm.set_portfolio)
+        self.portfolio_vm.portfolio_selection_changed.connect(self.ai_vm.set_portfolio)
         self.portfolio_selector.currentIndexChanged.connect(self._on_portfolio_selected)
         self.add_portfolio_btn.clicked.connect(self._create_portfolio)
 

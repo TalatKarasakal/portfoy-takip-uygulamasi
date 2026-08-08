@@ -19,6 +19,7 @@ from app.services.ai.risk_analyzer import analyze_risk
 from app.services.bist_service import BistService
 from app.services.ml import anomaly, indicators
 from app.services.tefas_service import TefasService
+from app.services.transaction_service import TransactionCommand, TransactionService
 from app.utils.app_settings import load_settings_dict
 from app.utils.logger import app_logger
 
@@ -68,6 +69,10 @@ class AIViewModel(QObject):
         self.kpi_data: Dict[str, Any] = {}
         self.chat_history: List[Dict[str, str]] = []
         self._workers: List[AIWorker] = []
+        self.selected_portfolio_id = 1
+
+    def set_portfolio(self, portfolio_id) -> None:
+        self.selected_portfolio_id = int(portfolio_id) if portfolio_id is not None else None
 
     # --- Portföy verisiyle senkronizasyon (PortfolioViewModel sinyalleri) ---
 
@@ -189,28 +194,27 @@ class AIViewModel(QObject):
         Varlık kodu mevcut değilse yeni bir varlık oluşturur.
         """
         try:
-            from app.models.transaction import Transaction, TransactionType
-
             code = data["asset_code"].upper()
+            if self.selected_portfolio_id is None:
+                raise ValueError("İşlem kaydetmek için belirli bir portföy seçin.")
             with get_session() as session:
-                asset = session.query(Asset).filter_by(code=code).first()
-                if asset is None:
-                    a_type = AssetType.BIST if asset_type == "BIST" else AssetType.TEFAS
-                    asset = Asset(code=code, name=code, asset_type=a_type)
-                    session.add(asset)
-                    session.flush()
-
-                tx = Transaction(
+                a_type = AssetType.BIST if asset_type == "BIST" else AssetType.TEFAS
+                asset = TransactionService.get_or_create_asset(
+                    session, code, name=code, asset_type=a_type
+                )
+                command = TransactionCommand.from_values(
+                    portfolio_id=self.selected_portfolio_id,
                     asset_id=asset.id,
-                    transaction_type=TransactionType[data["tx_type"]],
-                    date=datetime.date.fromisoformat(data["date"]),
+                    transaction_type=data["tx_type"],
+                    date=data["date"],
                     quantity=data["quantity"],
                     unit_price=data["unit_price"],
                     commission=data.get("commission", 0) or 0,
                     tax=0,
                     note=data.get("note", ""),
                 )
-                session.add(tx)
+                with session.begin_nested():
+                    TransactionService.create(session, command)
                 session.commit()
             self.transaction_saved.emit(
                 f"{code} için {data['tx_type']} işlemi kaydedildi."
@@ -316,8 +320,8 @@ class AIViewModel(QObject):
     def save_imported_holdings(self, holdings: List[Dict[str, Any]]) -> None:
         """Onaylanan varlık listesini varlık + tek BUY işlemi olarak kaydeder."""
         try:
-            from app.models.transaction import Transaction, TransactionType
-
+            if self.selected_portfolio_id is None:
+                raise ValueError("İçe aktarmak için belirli bir portföy seçin.")
             count = 0
             with get_session() as session:
                 for h in holdings:
@@ -325,24 +329,22 @@ class AIViewModel(QObject):
                     if not code:
                         continue
                     a_type = AssetType.BIST if h.get("type") == "BIST" else AssetType.TEFAS
-                    asset = session.query(Asset).filter_by(code=code).first()
-                    if asset is None:
-                        asset = Asset(code=code, name=code, asset_type=a_type)
-                        session.add(asset)
-                        session.flush()
+                    asset = TransactionService.get_or_create_asset(
+                        session, code, name=code, asset_type=a_type
+                    )
                     qty = float(h.get("quantity", 0) or 0)
                     price = float(h.get("avg_cost", 0) or 0)
                     if qty > 0 and price > 0:
-                        session.add(Transaction(
+                        command = TransactionCommand.from_values(
+                            portfolio_id=self.selected_portfolio_id,
                             asset_id=asset.id,
-                            transaction_type=TransactionType.BUY,
+                            transaction_type="BUY",
                             date=datetime.date.today(),
                             quantity=qty,
                             unit_price=price,
-                            commission=0,
-                            tax=0,
                             note="Görüntüden içe aktarıldı",
-                        ))
+                        )
+                        TransactionService.create(session, command)
                     count += 1
                 session.commit()
             self.holdings_imported.emit(f"{count} varlık görüntüden içe aktarıldı.")

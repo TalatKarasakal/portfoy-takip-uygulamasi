@@ -9,6 +9,10 @@ from app.models.transaction import Transaction, TransactionType
 TRADING_DAYS_PER_YEAR = 252
 
 
+class PortfolioCalculationError(ValueError):
+    pass
+
+
 class PortfolioService:
     @staticmethod
     def calculate_cost_and_pnl(transactions: List[Transaction], current_price: float, method: str = "WAC") -> Dict[str, Any]:
@@ -25,8 +29,17 @@ class PortfolioService:
                 "total_cost": 0
             }
 
-        # Tarihe göre sırala
-        txs = sorted(transactions, key=lambda x: x.date)
+        # Aynı günlü işlemler veritabanı kimliğiyle deterministik sıralanır.
+        txs = [
+            tx
+            for _index, tx in sorted(
+                enumerate(transactions),
+                key=lambda item: (
+                    item[1].date,
+                    item[1].id if item[1].id is not None else 2**63 + item[0],
+                ),
+            )
+        ]
 
         remaining_quantity = 0.0
         realized_pnl = 0.0
@@ -44,6 +57,8 @@ class PortfolioService:
                     total_invested += cost
                     remaining_quantity += qty
                 elif ttype == TransactionType.SELL:
+                    if qty > remaining_quantity:
+                        raise PortfolioCalculationError("Satış miktarı portföy bakiyesini aşıyor.")
                     if remaining_quantity > 0:
                         avg_cost_per_unit = total_invested / remaining_quantity
                         # Satış karı = (Satış geliri net) - (Satılan adet * ortalama maliyet)
@@ -78,6 +93,8 @@ class PortfolioService:
                     inventory.append({"qty": qty, "unit_cost": unit_full_cost})
                     remaining_quantity += qty
                 elif ttype == TransactionType.SELL:
+                    if qty > remaining_quantity:
+                        raise PortfolioCalculationError("Satış miktarı portföy bakiyesini aşıyor.")
                     qty_to_sell = qty
                     net_revenue = (float(tx.unit_price) * qty) - (float(tx.commission) + float(tx.tax))
                     total_cost_of_sold = 0.0

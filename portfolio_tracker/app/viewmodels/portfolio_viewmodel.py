@@ -11,10 +11,11 @@ from app.models.transaction import Transaction
 from app.services.bist_service import BistService
 from app.services.currency_service import CurrencyService
 from app.services.portfolio_account_service import PortfolioAccountService
-from app.services.portfolio_service import PortfolioService
+from app.services.portfolio_service import PortfolioCalculationError, PortfolioService
 from app.services.price_history_service import PriceHistoryService
 from app.services.snapshot_service import SnapshotService
 from app.services.tefas_service import TefasService
+from app.services.transaction_service import TransactionCommand, TransactionService
 from app.utils.display import display
 from app.utils.logger import app_logger
 
@@ -63,6 +64,7 @@ class PortfolioLoaderThread(QThread):
                 prev_value_total = 0.0
                 failed_codes = []
                 stale_codes = []
+                invalid_codes = []
 
                 def fetch_asset_quote(asset_data):
                     asset_id, code, asset_type = asset_data
@@ -115,7 +117,13 @@ class PortfolioLoaderThread(QThread):
                         for tx in asset.transactions
                         if self.portfolio_id is None or tx.portfolio_id == self.portfolio_id
                     ]
-                    stats = PortfolioService.calculate_cost_and_pnl(txs, current_price, method=self.cost_method)
+                    try:
+                        stats = PortfolioService.calculate_cost_and_pnl(
+                            txs, current_price, method=self.cost_method
+                        )
+                    except PortfolioCalculationError as exc:
+                        invalid_codes.append(f"{asset.code}: {exc}")
+                        continue
 
                     # Gerçekleşmiş K/Z tüm varlıklar için toplanır (tamamen satılmış
                     # pozisyonların kârı da dahil; aksi halde portföyden tamamen çıkılan
@@ -229,6 +237,7 @@ class PortfolioLoaderThread(QThread):
                     "worst": {"code": worst["code"], "pnl_pct": worst["pnl_pct"]} if worst else None,
                     "failed_codes": failed_codes,
                     "stale_codes": stale_codes,
+                    "invalid_codes": invalid_codes,
                     "history": history,
                     "portfolio_items": portfolio_items,
                     "portfolio_id": self.portfolio_id,
@@ -339,11 +348,9 @@ class PortfolioViewModel(QObject):
         try:
             with get_session() as session:
                 asset_type = AssetType.BIST if a_type == "BIST" else AssetType.TEFAS
-                asset = session.query(Asset).filter_by(code=code.upper()).first()
-                if not asset:
-                    asset = Asset(code=code.upper(), name=name, asset_type=asset_type)
-                    session.add(asset)
-                    session.flush()  # asset.id için
+                asset = TransactionService.get_or_create_asset(
+                    session, code, name=name, asset_type=asset_type
+                )
 
                 # İsteğe bağlı açılış işlemi (adet ve fiyat girildiyse)
                 try:
@@ -354,18 +361,16 @@ class PortfolioViewModel(QObject):
                 if q > 0 and p > 0:
                     from datetime import date as _date
 
-                    from app.models.transaction import Transaction, TransactionType
-                    session.add(Transaction(
+                    command = TransactionCommand.from_values(
                         portfolio_id=self._require_concrete_portfolio(),
                         asset_id=asset.id,
-                        transaction_type=TransactionType.BUY,
+                        transaction_type="BUY",
                         date=_date.today(),
                         quantity=q,
                         unit_price=p,
-                        commission=0,
-                        tax=0,
                         note="Açılış (varlık eklerken)",
-                    ))
+                    )
+                    TransactionService.create(session, command)
                 session.commit()
             self.load_data()
         except Exception as e:
@@ -403,20 +408,19 @@ class PortfolioViewModel(QObject):
     def add_transaction(self, **kwargs):
         try:
             with get_session() as session:
-                from app.models.transaction import Transaction, TransactionType
-                tx = Transaction(
+                command = TransactionCommand.from_values(
                     portfolio_id=self._require_concrete_portfolio(),
                     asset_id=kwargs["asset_id"],
-                    transaction_type=TransactionType[kwargs["tx_type"]],
+                    transaction_type=kwargs["tx_type"],
                     date=kwargs["date"],
                     quantity=kwargs["quantity"],
                     unit_price=kwargs["unit_price"],
                     commission=kwargs.get("commission", 0) or 0,
                     tax=kwargs.get("tax", 0) or 0,
-                    note=kwargs.get("note", "")
+                    note=kwargs.get("note", ""),
                 )
-                session.add(tx)
-                session.commit()
+                with session.begin():
+                    TransactionService.create(session, command)
             self.load_data()
         except Exception as e:
             app_logger.error(f"Error adding transaction: {e}")
