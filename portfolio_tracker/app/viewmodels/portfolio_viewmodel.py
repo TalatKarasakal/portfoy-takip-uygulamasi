@@ -14,6 +14,8 @@ from app.services.currency_service import CurrencyService
 from app.services.portfolio_account_service import PortfolioAccountService
 from app.services.portfolio_service import PortfolioCalculationError, PortfolioService
 from app.services.price_history_service import PriceHistoryService
+from app.services.pricing_types import DataFreshness, QuoteResult
+from app.services.refresh_policy import RefreshPolicy
 from app.services.snapshot_service import SnapshotService
 from app.services.tefas_service import TefasService
 from app.services.transaction_service import TransactionCommand, TransactionService
@@ -27,6 +29,8 @@ class PortfolioLoadRequest:
     cost_method: str
     force_refresh: bool
     portfolio_id: int | None
+    allow_bist_network: bool
+    allow_tefas_network: bool
 
 
 class PortfolioLoaderThread(QThread):
@@ -63,19 +67,37 @@ class PortfolioLoaderThread(QThread):
                 prev_value_total = 0.0
                 failed_codes = []
                 stale_codes = []
+                connection_error_codes = []
+                scheduled_codes = []
                 invalid_codes = []
 
                 def fetch_asset_quote(asset_data):
                     asset_id, code, asset_type = asset_data
                     try:
                         if asset_type == AssetType.BIST.name:
-                            q = bist_service.fetch_quote(code, self.request.force_refresh)
+                            q = bist_service.fetch_quote(
+                                code,
+                                self.request.force_refresh,
+                                self.request.allow_bist_network,
+                            )
                         else:
-                            q = tefas_service.fetch_quote(code, self.request.force_refresh)
+                            q = tefas_service.fetch_quote(
+                                code,
+                                self.request.force_refresh,
+                                self.request.allow_tefas_network,
+                            )
                         return asset_id, q
                     except Exception as ex:
                         app_logger.error(f"Error fetching quote for {code}: {ex}")
-                        return asset_id, {"price": None, "prev_close": None}
+                        return asset_id, QuoteResult(
+                            None,
+                            None,
+                            "bilinmiyor",
+                            None,
+                            datetime.datetime.now(datetime.timezone.utc),
+                            DataFreshness.OFFLINE,
+                            str(ex),
+                        )
 
                 quotes_map = {}
                 quote_inputs = [(asset.id, asset.code, asset.asset_type.name) for asset in assets]
@@ -85,7 +107,7 @@ class PortfolioLoaderThread(QThread):
                         quotes_map[asset_id] = q
 
                 for asset in assets:
-                    quote = quotes_map.get(asset.id) or {"price": None, "prev_close": None}
+                    quote = quotes_map[asset.id]
                     if asset.asset_type == AssetType.TEFAS:
                         # Fon adı henüz çözülmemişse (ad == kod) TEFAS'tan tam adı çek
                         if not asset.name or asset.name == asset.code:
@@ -132,7 +154,12 @@ class PortfolioLoaderThread(QThread):
 
                     if stats["remaining_quantity"] > 0:
                         if current_price <= 0:
-                            failed_codes.append(asset.code)
+                            if quote.error and "bek" in quote.error.lower():
+                                scheduled_codes.append(asset.code)
+                            elif quote.error and "bulunamadı" not in quote.error.lower():
+                                connection_error_codes.append(asset.code)
+                            else:
+                                failed_codes.append(asset.code)
                         elif is_stale:
                             stale_codes.append(asset.code)
 
@@ -167,6 +194,13 @@ class PortfolioLoaderThread(QThread):
                             "unrealized_pnl": stats["unrealized_pnl"],
                             "pnl": item_pnl,
                             "pnl_pct": item_pnl_pct,
+                            "price_source": quote.source,
+                            "price_date": quote.price_date,
+                            "price_fetched_at": quote.fetched_at,
+                            "price_status": (
+                                DataFreshness.STALE.value if is_stale else quote.status.value
+                            ),
+                            "price_error": quote.error,
                         })
 
                 securities_value_try = total_value_try
@@ -239,12 +273,16 @@ class PortfolioLoaderThread(QThread):
                     "worst": {"code": worst["code"], "pnl_pct": worst["pnl_pct"]} if worst else None,
                     "failed_codes": failed_codes,
                     "stale_codes": stale_codes,
+                    "connection_error_codes": connection_error_codes,
+                    "scheduled_codes": scheduled_codes,
                     "invalid_codes": invalid_codes,
                     "history": history,
                     "portfolio_items": portfolio_items,
                     "portfolio_id": self.request.portfolio_id,
                     "cash_balance_try": cash_balance,
                     "securities_value_try": securities_value_try,
+                    "tefas_network_attempted": self.request.allow_tefas_network
+                    and any(asset.asset_type == AssetType.TEFAS for asset in assets),
                 }
                 if not self.isInterruptionRequested():
                     self.data_loaded_signal.emit(portfolio_items, kpi_data)
@@ -273,8 +311,10 @@ class PortfolioViewModel(QObject):
         self.cost_method = self._load_cost_method()
         self._thread = None
         self._reload_pending = False
+        self._pending_force_refresh = False
         self._history_workers: dict[str, FunctionWorker] = {}
         self.selected_portfolio_id = 1
+        self.refresh_policy = RefreshPolicy()
 
     def _load_cost_method(self) -> str:
         """Aktif maliyet metodunu (WAC/FIFO/LIFO) ayarlardan okur."""
@@ -299,28 +339,47 @@ class PortfolioViewModel(QObject):
         # çökertir. Bunun yerine mevcut yükleme bitince bir kez yeniden çalış.
         if self._thread is not None and self._thread.isRunning():
             self._reload_pending = True
+            self._pending_force_refresh = self.merge_force_refresh(
+                self._pending_force_refresh, force_refresh
+            )
             return
         method = cost_method or self.cost_method
+        refresh_plan = self.refresh_policy.plan(force_refresh)
         self.loading_started.emit()
         self._thread = PortfolioLoaderThread(
-            PortfolioLoadRequest(method, force_refresh, self.selected_portfolio_id)
+            PortfolioLoadRequest(
+                method,
+                force_refresh,
+                self.selected_portfolio_id,
+                refresh_plan.allow_bist_network,
+                refresh_plan.allow_tefas_network,
+            )
         )
         self._thread.data_loaded_signal.connect(self._on_data_loaded_success)
         self._thread.error_signal.connect(self._on_data_loaded_error)
         self._thread.finished.connect(self._on_loader_finished)
         self._thread.start()
 
+    @staticmethod
+    def merge_force_refresh(current: bool, incoming: bool) -> bool:
+        """Bekleyen zorunlu isteğin normal bir istek tarafından düşürülmesini önler."""
+        return current or incoming
+
     def _on_loader_finished(self):
         self.loading_finished.emit()
         # Yükleme sürerken gelen bir yenileme isteği biriktiyse şimdi çalıştır.
         if self._reload_pending:
             self._reload_pending = False
-            self.load_data()
+            force_refresh = self._pending_force_refresh
+            self._pending_force_refresh = False
+            self.load_data(force_refresh=force_refresh)
 
     @Slot(list, dict)
     def _on_data_loaded_success(self, items, kpi_data):
         self.cached_portfolio_data = items
         self.cached_kpi_data = kpi_data
+        if kpi_data.get("tefas_network_attempted"):
+            self.refresh_policy.mark_tefas_refreshed()
         # Görüntüleme kuru güncellensin ki view'lar doğru çevirsin
         display.set_rate(kpi_data.get("usd_try", 0))
         self.data_loaded.emit(items)
@@ -334,6 +393,9 @@ class PortfolioViewModel(QObject):
         self.data_loaded.emit(self.cached_portfolio_data)
         if self.cached_kpi_data:
             self.kpi_updated.emit(self.cached_kpi_data)
+
+    def configure_refresh_policy(self, overrides_json: str) -> None:
+        self.refresh_policy.configure(overrides_json)
 
     @Slot(str)
     def _on_data_loaded_error(self, err):

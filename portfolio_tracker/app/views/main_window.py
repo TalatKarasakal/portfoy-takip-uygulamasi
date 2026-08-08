@@ -89,7 +89,9 @@ class MainWindow(QMainWindow):
         self.manual_refresh_btn.setIcon(qta.icon("fa5s.sync-alt", color="#6B7280"))
         self.manual_refresh_btn.setIconSize(QSize(16, 16))
         self.manual_refresh_btn.setToolTip("Fiyatları ve portföyü şimdi güncelle")
-        self.manual_refresh_btn.clicked.connect(lambda: self.portfolio_vm.load_data())
+        self.manual_refresh_btn.clicked.connect(
+            lambda: self.portfolio_vm.load_data(force_refresh=True)
+        )
         sidebar_layout.addWidget(self.manual_refresh_btn)
 
         # Yenileme durum göstergesi (sidebar altı)
@@ -245,6 +247,9 @@ class MainWindow(QMainWindow):
         # Maliyet metodu
         method = settings_dict.get("cost_method", "WAC")
         self.portfolio_vm.set_cost_method(method)
+        self.portfolio_vm.configure_refresh_policy(
+            settings_dict.get("market_calendar_overrides", "")
+        )
 
         # Bildirim tercihi
         self._notifications_enabled = str(settings_dict.get("notifications_enabled", "1")) in ("1", "True", "true")

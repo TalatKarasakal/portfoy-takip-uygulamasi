@@ -13,6 +13,7 @@ from typing import Dict, List, Tuple
 
 import yfinance as yf
 
+from app.services.pricing_types import BenchmarkResult, DataFreshness
 from app.utils.cache import price_cache
 from app.utils.logger import prices_logger
 
@@ -39,7 +40,7 @@ class BenchmarkService:
 
     @staticmethod
     def fetch_series(start: datetime.date, end: datetime.date,
-                     force_refresh: bool = False) -> Dict[str, Series]:
+                     force_refresh: bool = False) -> BenchmarkResult:
         """BIST 100, USD/TRY ve gram altın (TRY) serilerini döndürür.
 
         Sonuç 6 saat cache'lenir (benchmark verisi sık değişmez).
@@ -48,7 +49,18 @@ class BenchmarkService:
         if not force_refresh:
             cached = price_cache.get(cache_key)
             if cached is not None:
-                return cached
+                if isinstance(cached, BenchmarkResult):
+                    return BenchmarkResult(
+                        cached.series,
+                        cached.fetched_at,
+                        DataFreshness.CACHE,
+                        cached.error,
+                    )
+                return BenchmarkResult(
+                    cached,
+                    datetime.datetime.now(datetime.timezone.utc),
+                    DataFreshness.CACHE,
+                )
 
         result: Dict[str, Series] = {}
 
@@ -77,5 +89,16 @@ class BenchmarkService:
             if gram_series:
                 result["Gram Altın"] = gram_series
 
-        price_cache.set(cache_key, result)
-        return result
+        typed_result = BenchmarkResult(
+            result,
+            datetime.datetime.now(datetime.timezone.utc),
+            DataFreshness.LIVE if result else DataFreshness.OFFLINE,
+            None if result else "Benchmark verisi alınamadı.",
+        )
+        if result:
+            price_cache.set(
+                cache_key,
+                typed_result,
+                ttl=price_cache.BENCHMARK_TTL,
+            )
+        return typed_result

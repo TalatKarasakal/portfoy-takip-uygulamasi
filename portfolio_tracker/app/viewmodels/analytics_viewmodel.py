@@ -95,7 +95,7 @@ class AnalyticsViewModel(QObject):
             "benchmark",
             lambda: BenchmarkService.fetch_series(request[0], request[1]),
         )
-        worker.result_ready.connect(lambda _tag, result: self.benchmark_loaded.emit(result or {}))
+        worker.result_ready.connect(lambda _tag, result: self.benchmark_loaded.emit(result))
         worker.error_occurred.connect(lambda _tag, message: self.error_occurred.emit(message))
         worker.finished.connect(self._clear_benchmark_worker)
         self._benchmark_worker = worker

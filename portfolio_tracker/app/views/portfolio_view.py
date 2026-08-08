@@ -94,6 +94,19 @@ class PortfolioTableModel(QAbstractTableModel):
                 if v > 0: return PROFIT_COLOR
                 if v < 0: return LOSS_COLOR
 
+        elif role == Qt.ToolTipRole and col == self.COL_PRICE:
+            price_date = row.get("price_date") or "—"
+            fetched_at = row.get("price_fetched_at")
+            fetched_text = fetched_at.isoformat() if fetched_at else "—"
+            detail = (
+                f"Kaynak: {row.get('price_source', '—')}\n"
+                f"Durum: {row.get('price_status', '—')}\n"
+                f"Fiyat tarihi: {price_date}\nÇekilme zamanı: {fetched_text}"
+            )
+            if row.get("price_error"):
+                detail += f"\nAçıklama: {row['price_error']}"
+            return detail
+
         elif role == Qt.TextAlignmentRole:
             if col >= self.COL_QTY:
                 return int(Qt.AlignRight | Qt.AlignVCenter)
@@ -275,12 +288,18 @@ class PortfolioView(QWidget):
     def on_kpi_updated(self, kpi_data):
         stale = kpi_data.get("stale_codes", [])
         failed = kpi_data.get("failed_codes", [])
+        connection_errors = kpi_data.get("connection_error_codes", [])
+        scheduled = kpi_data.get("scheduled_codes", [])
         invalid = kpi_data.get("invalid_codes", [])
         parts = []
         if stale:
             parts.append(f"⚠ Son bilinen fiyat kullanılıyor: {', '.join(stale)}")
         if failed:
             parts.append(f"⛔ Fiyatı alınamadı: {', '.join(failed)}")
+        if connection_errors:
+            parts.append(f"⛔ Bağlantı hatası: {', '.join(connection_errors)}")
+        if scheduled:
+            parts.append(f"ℹ Otomatik yenileme saati bekleniyor: {', '.join(scheduled)}")
         if invalid:
             parts.append(f"⛔ Veri düzeltmesi gerekli: {'; '.join(invalid)}")
         self.warning_label.setText("   ".join(parts))

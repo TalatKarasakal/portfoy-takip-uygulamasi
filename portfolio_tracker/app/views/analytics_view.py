@@ -46,6 +46,7 @@ class AnalyticsView(QWidget):
         self._history = []
         self._monthly_returns = {}
         self._benchmark = {}
+        self._benchmark_error = ""
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 20, 20, 20)
@@ -263,7 +264,8 @@ class AnalyticsView(QWidget):
             self._render_benchmark()
 
     def _on_benchmark_loaded(self, series: dict):
-        self._benchmark = series or {}
+        self._benchmark = series
+        self._benchmark_error = getattr(series, "error", "") or ""
         self._render_benchmark()
 
     def _render_attribution(self, attribution):
@@ -385,8 +387,8 @@ class AnalyticsView(QWidget):
 
         if plotted == 0:
             self.benchmark_status.setText(
-                "Karşılaştırma verisi yok. (Portföy geçmişi birikmeli; benchmark "
-                "verisi internet bağlantısı gerektirir.)"
+                self._benchmark_error
+                or "Karşılaştırma verisi yok. Portföy geçmişi henüz yetersiz olabilir."
             )
         else:
             self.benchmark_status.setText("")

@@ -27,6 +27,8 @@ DEFAULT_SETTINGS: Dict[str, str] = {
     "theme": "system",
     "default_currency": "TRY",
     "refresh_interval_minutes": "15",
+    # {"holidays": ["YYYY-MM-DD"], "half_days": {"YYYY-MM-DD": "13:00"}}
+    "market_calendar_overrides": "",
     "cost_method": "WAC",
     "notifications_enabled": "1",
     # Yatırımcı risk profili: "conservative" | "balanced" | "aggressive"

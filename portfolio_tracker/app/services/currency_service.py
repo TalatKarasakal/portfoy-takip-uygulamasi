@@ -35,9 +35,7 @@ class CurrencyService:
                 selling_node = usd_node.find("ForexSelling")
                 if selling_node is not None and selling_node.text:
                     rate = float(selling_node.text.strip())
-                    # Döviz kuru 24 saat geçerli sayılabiliyor ama cache'imiz standart 15 dk işler
-                    # Farklı bir TTL uygulamak istenirse cache.set'e özel parametre verilebilir.
-                    price_cache.set(cache_key, rate)
+                    price_cache.set(cache_key, rate, ttl=price_cache.CURRENCY_TTL)
                     return rate
 
             prices_logger.warning("USD rate not found in TCMB XML structure")

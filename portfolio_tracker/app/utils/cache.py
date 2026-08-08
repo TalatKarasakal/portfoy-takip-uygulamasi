@@ -1,29 +1,42 @@
+"""Farklı veri sınıfları için süreli ve test edilebilir bellek önbelleği."""
+
+from __future__ import annotations
+
 import time
-from typing import Any, Dict, Optional, Tuple
+from collections.abc import Callable
+from typing import Any
 
 
 class PriceCache:
-    """Basit in-memory fiyat önbelleği. 15 dk (900 sn) TTL kullanır."""
-    _cache: Dict[str, Tuple[float, Any]] = {}  # { asset_code: (timestamp, price) }
-    DEFAULT_TTL: int = 900  # 15 dakika
+    DEFAULT_TTL = 15 * 60
+    PRICE_TTL = 15 * 60
+    CURRENCY_TTL = 24 * 60 * 60
+    BENCHMARK_TTL = 6 * 60 * 60
+    FUND_NAME_TTL = 7 * 24 * 60 * 60
 
-    @classmethod
-    def get(cls, asset_code: str) -> Optional[Any]:
-        if asset_code in cls._cache:
-            timestamp, price = cls._cache[asset_code]
-            if time.time() - timestamp < cls.DEFAULT_TTL:
-                return price
-            else:
-                del cls._cache[asset_code]
+    def __init__(self, clock: Callable[[], float] | None = None) -> None:
+        self._clock = clock or time.monotonic
+        self._cache: dict[str, tuple[float, float, Any]] = {}
+
+    def get(self, key: str) -> Any | None:
+        entry = self._cache.get(key)
+        if entry is None:
+            return None
+        timestamp, ttl, value = entry
+        if self._clock() - timestamp < ttl:
+            return value
         return None
 
-    @classmethod
-    def set(cls, asset_code: str, price: Any) -> None:
-        cls._cache[asset_code] = (time.time(), price)
+    def peek(self, key: str) -> Any | None:
+        """Süresi dolmuş olsa da son bilinen değeri çevrimdışı kullanım için döndürür."""
+        entry = self._cache.get(key)
+        return entry[2] if entry is not None else None
 
-    @classmethod
-    def clear(cls) -> None:
-        """Cache temizliği ('Şimdi Yenile' dendiğinde kullanılır)."""
-        cls._cache.clear()
+    def set(self, key: str, value: Any, ttl: float | None = None) -> None:
+        self._cache[key] = (self._clock(), ttl or self.DEFAULT_TTL, value)
+
+    def clear(self) -> None:
+        self._cache.clear()
+
 
 price_cache = PriceCache()

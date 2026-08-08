@@ -33,7 +33,8 @@ def test_fetch_current_price_success(mock_fetch_quote, MockTicker, override_cach
 
     # Check cache is set with BIST_QUOTE_ suffix and quote dict
     cached_quote = price_cache.get("BIST_QUOTE_THYAO.IS")
-    assert cached_quote == {"price": 15.5, "prev_close": 15.0}
+    assert cached_quote.price == 15.5
+    assert cached_quote.prev_close == 15.0
 
 @patch('app.services.bist_service.yf.Ticker')
 @patch('app.services.bist_service.IsYatirimService.fetch_quote')
