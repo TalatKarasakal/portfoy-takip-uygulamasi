@@ -70,6 +70,7 @@ class PortfolioLoaderThread(QThread):
                 connection_error_codes = []
                 scheduled_codes = []
                 invalid_codes = []
+                lot_analysis = []
 
                 def fetch_asset_quote(asset_data):
                     asset_id, code, asset_type = asset_data
@@ -150,9 +151,44 @@ class PortfolioLoaderThread(QThread):
                     # Gerçekleşmiş K/Z tüm varlıklar için toplanır (tamamen satılmış
                     # pozisyonların kârı da dahil; aksi halde portföyden tamamen çıkılan
                     # pozisyonların kazancı kaybolurdu).
-                    realized_pnl_total += stats["realized_pnl"]
+                    realized_pnl = float(stats.realized_pnl)
+                    unrealized_pnl = float(stats.unrealized_pnl)
+                    remaining_quantity = float(stats.remaining_quantity)
+                    total_cost = float(stats.total_cost)
+                    average_cost = float(stats.average_cost)
+                    realized_pnl_total += realized_pnl
+                    asset_open_lots = [
+                        {
+                            "buy_transaction_id": lot.buy_transaction_id,
+                            "date": lot.acquired_date,
+                            "quantity": float(lot.quantity),
+                            "unit_cost": float(lot.unit_cost),
+                            "method": stats.method,
+                        }
+                        for lot in stats.open_lots
+                    ]
+                    asset_lot_matches = [
+                        {
+                            "sale_transaction_id": match.sale_transaction_id,
+                            "buy_transaction_id": match.buy_transaction_id,
+                            "quantity": float(match.quantity),
+                            "unit_cost": float(match.unit_cost),
+                            "sale_unit_price": float(match.sale_unit_price),
+                            "realized_pnl": float(match.realized_pnl),
+                            "method": match.method,
+                        }
+                        for match in stats.lot_matches
+                    ]
+                    if asset_open_lots or asset_lot_matches:
+                        lot_analysis.append(
+                            {
+                                "code": asset.code,
+                                "open_lots": asset_open_lots,
+                                "lot_matches": asset_lot_matches,
+                            }
+                        )
 
-                    if stats["remaining_quantity"] > 0:
+                    if remaining_quantity > 0:
                         if current_price <= 0:
                             if quote.error and "bek" in quote.error.lower():
                                 scheduled_codes.append(asset.code)
@@ -163,18 +199,18 @@ class PortfolioLoaderThread(QThread):
                         elif is_stale:
                             stale_codes.append(asset.code)
 
-                    if stats["remaining_quantity"] > 0:
-                        qty = stats["remaining_quantity"]
+                    if remaining_quantity > 0:
+                        qty = remaining_quantity
                         current_value = qty * current_price
                         item_daily_change = (current_price - prev_close) * qty
-                        item_pnl = stats["realized_pnl"] + stats["unrealized_pnl"]
+                        item_pnl = realized_pnl + unrealized_pnl
                         item_pnl_pct = (
-                            (item_pnl / stats["total_cost"] * 100) if stats["total_cost"] > 0 else 0.0
+                            (item_pnl / total_cost * 100) if total_cost > 0 else 0.0
                         )
 
                         total_value_try += current_value
-                        total_cost_try += stats["total_cost"]
-                        unrealized_pnl_total += stats["unrealized_pnl"]
+                        total_cost_try += total_cost
+                        unrealized_pnl_total += unrealized_pnl
                         daily_change_total += item_daily_change
                         prev_value_total += prev_close * qty
 
@@ -184,14 +220,14 @@ class PortfolioLoaderThread(QThread):
                             "name": asset.name,
                             "type": asset.asset_type.name,
                             "quantity": qty,
-                            "avg_cost": stats["average_cost"],
+                            "avg_cost": average_cost,
                             "current_price": current_price,
                             "prev_close": prev_close,
-                            "total_cost": stats["total_cost"],
+                            "total_cost": total_cost,
                             "current_value": current_value,
                             "daily_change": item_daily_change,
-                            "realized_pnl": stats["realized_pnl"],
-                            "unrealized_pnl": stats["unrealized_pnl"],
+                            "realized_pnl": realized_pnl,
+                            "unrealized_pnl": unrealized_pnl,
                             "pnl": item_pnl,
                             "pnl_pct": item_pnl_pct,
                             "price_source": quote.source,
@@ -201,6 +237,8 @@ class PortfolioLoaderThread(QThread):
                                 DataFreshness.STALE.value if is_stale else quote.status.value
                             ),
                             "price_error": quote.error,
+                            "open_lots": asset_open_lots,
+                            "lot_matches": asset_lot_matches,
                         })
 
                 securities_value_try = total_value_try
@@ -283,6 +321,7 @@ class PortfolioLoaderThread(QThread):
                     "securities_value_try": securities_value_try,
                     "tefas_network_attempted": self.request.allow_tefas_network
                     and any(asset.asset_type == AssetType.TEFAS for asset in assets),
+                    "lot_analysis": lot_analysis,
                 }
                 if not self.isInterruptionRequested():
                     self.data_loaded_signal.emit(portfolio_items, kpi_data)

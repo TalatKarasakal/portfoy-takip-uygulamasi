@@ -30,3 +30,4 @@ class ImportBatch(Base):
     transactions = relationship("Transaction", back_populates="import_batch")
     cash_entries = relationship("CashEntry", back_populates="import_batch")
     watchlist_items = relationship("WatchlistItem", back_populates="import_batch")
+    dividend_plans = relationship("DividendPlan", back_populates="import_batch")

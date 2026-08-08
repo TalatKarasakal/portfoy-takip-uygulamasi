@@ -25,6 +25,7 @@ class Asset(Base):
     transactions = relationship("Transaction", back_populates="asset", cascade="all, delete-orphan")
     price_histories = relationship("PriceHistory", back_populates="asset", cascade="all, delete-orphan")
     alerts = relationship("Alert", back_populates="asset", cascade="all, delete-orphan")
+    dividend_plans = relationship("DividendPlan", back_populates="asset", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<Asset(code='{self.code}', type='{self.asset_type.name}')>"

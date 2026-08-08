@@ -34,7 +34,7 @@ def test_new_database_is_created_at_head(tmp_path):
                 "SELECT name FROM sqlite_master WHERE type='table'"
             ).fetchall()
         }
-    assert revision == "0004_remove_secrets"
+    assert revision == "0005_dividend_plans"
     assert {"assets", "transactions", "settings", "portfolios", "cash_entries"}.issubset(tables)
     engine.dispose()
 
@@ -61,7 +61,7 @@ def test_legacy_database_requires_approval_and_is_stamped(tmp_path):
     MigrationService.ensure_current(engine, approved=True, backup_callback=backup)
     with sqlite3.connect(database) as connection:
         revision = connection.execute("SELECT version_num FROM alembic_version").fetchone()[0]
-    assert revision == "0004_remove_secrets"
+    assert revision == "0005_dividend_plans"
     assert backups == [True]
     engine.dispose()
 

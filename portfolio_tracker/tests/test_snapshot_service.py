@@ -48,3 +48,28 @@ def test_get_history_days_filter(session):
     hist = SnapshotService.get_history(session, days=30)
     assert len(hist) == 1
     assert hist[0]["total_value_try"] == 2.0
+
+
+def test_consolidated_history_carries_last_known_portfolio_value(session):
+    first = datetime.date(2024, 1, 1)
+    second = datetime.date(2024, 1, 2)
+    SnapshotService.record_snapshot(
+        session, 100, 90, 10, portfolio_id=1, snapshot_date=first
+    )
+    SnapshotService.record_snapshot(
+        session, 200, 180, 20, portfolio_id=2, snapshot_date=first
+    )
+    SnapshotService.record_snapshot(
+        session,
+        110,
+        90,
+        20,
+        portfolio_id=1,
+        snapshot_date=second,
+        net_external_flow_try=5,
+    )
+
+    history = SnapshotService.get_consolidated_history(session)
+
+    assert [row["total_value_try"] for row in history] == [300.0, 310.0]
+    assert history[-1]["net_external_flow_try"] == 5.0

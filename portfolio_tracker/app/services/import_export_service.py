@@ -15,14 +15,15 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.database.types import utc_now
 from app.models.asset import AssetType
+from app.models.dividend_plan import DividendPlan, DividendPlanStatus
 from app.models.import_batch import ImportBatch, ImportBatchStatus
 from app.models.portfolio import CashEntry, CashEntryType, Portfolio, WatchlistItem
-from app.models.transaction import Transaction
+from app.models.transaction import Transaction, TransactionType
 from app.services.portfolio_account_service import PortfolioAccountService
 from app.services.transaction_service import TransactionCommand, TransactionService
 from app.utils.logger import app_logger
 
-WORKBOOK_SCHEMA_VERSION = "2"
+WORKBOOK_SCHEMA_VERSION = "3"
 PORTFOLIO_EXPORT_COLUMNS = [
     "Kod",
     "Ad",
@@ -164,10 +165,16 @@ class ImportExportService:
         watch_query = session.query(WatchlistItem).options(
             joinedload(WatchlistItem.asset), joinedload(WatchlistItem.portfolio)
         )
+        dividend_plan_query = session.query(DividendPlan).options(
+            joinedload(DividendPlan.asset), joinedload(DividendPlan.portfolio)
+        )
         if portfolio_id is not None:
             tx_query = tx_query.filter(Transaction.portfolio_id == portfolio_id)
             cash_query = cash_query.filter(CashEntry.portfolio_id == portfolio_id)
             watch_query = watch_query.filter(WatchlistItem.portfolio_id == portfolio_id)
+            dividend_plan_query = dividend_plan_query.filter(
+                DividendPlan.portfolio_id == portfolio_id
+            )
 
         tx_rows = [
             {
@@ -206,6 +213,24 @@ class ImportExportService:
             }
             for row in watch_query.order_by(WatchlistItem.id).all()
         ]
+        dividend_plan_rows = [
+            {
+                "Portföy": row.portfolio.name,
+                "Varlık Kodu": row.asset.code,
+                "Varlık Adı": row.asset.name,
+                "Varlık Türü": row.asset.asset_type.name,
+                "Ödeme Tarihi": row.payment_date,
+                "Hisse Başı Brüt": float(row.gross_per_share),
+                "Beklenen Adet": (
+                    float(row.expected_quantity) if row.expected_quantity is not None else None
+                ),
+                "Durum": row.status.name,
+                "Not": row.note or "",
+            }
+            for row in dividend_plan_query.order_by(
+                DividendPlan.payment_date, DividendPlan.id
+            ).all()
+        ]
         metadata = [
             {"Anahtar": "schema_version", "Değer": WORKBOOK_SCHEMA_VERSION},
             {"Anahtar": "exported_at_utc", "Değer": utc_now().isoformat()},
@@ -220,6 +245,9 @@ class ImportExportService:
             pd.DataFrame(tx_rows).to_excel(writer, sheet_name="İşlemler", index=False)
             pd.DataFrame(cash_rows).to_excel(writer, sheet_name="Nakit", index=False)
             pd.DataFrame(watch_rows).to_excel(writer, sheet_name="İzleme Listesi", index=False)
+            pd.DataFrame(dividend_plan_rows).to_excel(
+                writer, sheet_name="Temettü Planı", index=False
+            )
         app_logger.info("Excel dışa aktarımı tamamlandı: %s", file_path)
 
     @staticmethod
@@ -444,6 +472,60 @@ class ImportExportService:
                                 False,
                             )
                         )
+                continue
+            if normalized_sheet == "temettu plani":
+                for offset, raw in enumerate(frame.to_dict("records"), start=2):
+                    try:
+                        code = str(_value(raw, "Varlık Kodu", "Kod")).strip().upper()
+                        if not code:
+                            raise ImportValidationError("Varlık kodu boş olamaz.")
+                        status = str(_value(raw, "Durum", default="PLANNED")).strip().upper()
+                        if status not in DividendPlanStatus.__members__:
+                            raise ImportValidationError("Temettü plan durumu tanınmıyor.")
+                        expected_raw = _value(raw, "Beklenen Adet")
+                        data = {
+                            "portfolio_name": str(
+                                _value(raw, "Portföy", default=default_portfolio.name)
+                            ).strip(),
+                            "code": code,
+                            "name": str(_value(raw, "Varlık Adı", default=code)).strip() or code,
+                            "asset_type": str(
+                                _value(raw, "Varlık Türü", default="BIST")
+                            ).strip().upper(),
+                            "payment_date": _date(_value(raw, "Ödeme Tarihi")),
+                            "gross_per_share": _decimal(
+                                _value(raw, "Hisse Başı Brüt"), "Hisse başı brüt"
+                            ),
+                            "expected_quantity": (
+                                None
+                                if pd.isna(expected_raw)
+                                else _decimal(expected_raw, "Beklenen adet")
+                            ),
+                            "status": status,
+                            "note": str(_value(raw, "Not", default="") or "").strip(),
+                        }
+                        preview.rows.append(
+                            ImportPreviewRow(
+                                sheet_name,
+                                offset,
+                                "dividend_plan",
+                                ImportRowStatus.VALID,
+                                data,
+                            )
+                        )
+                    except Exception as exc:
+                        preview.rows.append(
+                            ImportPreviewRow(
+                                sheet_name,
+                                offset,
+                                "dividend_plan",
+                                ImportRowStatus.ERROR,
+                                {},
+                                str(exc),
+                                False,
+                            )
+                        )
+                continue
         if not preview.rows:
             raise ImportValidationError("Uygun içe aktarma sayfası bulunamadı.")
         return preview
@@ -521,6 +603,37 @@ class ImportExportService:
                     data["note"],
                 )
                 item.import_batch_id = batch.id
+            elif row.entity == "dividend_plan":
+                asset = TransactionService.get_or_create_asset(
+                    session, data["code"], data["name"], data["asset_type"]
+                )
+                plan = DividendPlan(
+                    portfolio_id=portfolio.id,
+                    asset_id=asset.id,
+                    payment_date=data["payment_date"],
+                    gross_per_share=data["gross_per_share"],
+                    expected_quantity=data["expected_quantity"],
+                    status=DividendPlanStatus[data["status"]],
+                    note=data["note"] or None,
+                    import_batch_id=batch.id,
+                )
+                if plan.status == DividendPlanStatus.PAID:
+                    plan.linked_transaction = (
+                        session.query(Transaction)
+                        .filter(
+                            Transaction.import_batch_id == batch.id,
+                            Transaction.portfolio_id == portfolio.id,
+                            Transaction.asset_id == asset.id,
+                            Transaction.date == plan.payment_date,
+                            Transaction.transaction_type == TransactionType.DIVIDEND,
+                            Transaction.quantity == plan.expected_quantity,
+                            Transaction.unit_price == plan.gross_per_share,
+                        )
+                        .first()
+                    )
+                    if plan.linked_transaction is None:
+                        plan.status = DividendPlanStatus.PLANNED
+                session.add(plan)
         session.flush()
         return ImportBatchResult(batch.id, len(rows))
 
@@ -546,13 +659,20 @@ class ImportExportService:
         if batch is None:
             raise ImportValidationError("Geri alınabilecek bir içe aktarım bulunamadı.")
 
+        plans = session.query(DividendPlan).filter(
+            DividendPlan.import_batch_id == batch.id
+        ).all()
+        count = len(plans)
+        for plan in plans:
+            session.delete(plan)
+        session.flush()
+
         transactions = (
             session.query(Transaction)
             .filter(Transaction.import_batch_id == batch.id)
             .order_by(Transaction.date.desc(), Transaction.id.desc())
             .all()
         )
-        count = 0
         for transaction in transactions:
             TransactionService.delete(session, transaction.id)
             count += 1

@@ -29,6 +29,7 @@ class Portfolio(Base):
     snapshots = relationship("PortfolioSnapshot", back_populates="portfolio", cascade="all, delete-orphan")
     cash_entries = relationship("CashEntry", back_populates="portfolio", cascade="all, delete-orphan")
     watchlist_items = relationship("WatchlistItem", back_populates="portfolio", cascade="all, delete-orphan")
+    dividend_plans = relationship("DividendPlan", back_populates="portfolio", cascade="all, delete-orphan")
 
 
 class CashEntry(Base):

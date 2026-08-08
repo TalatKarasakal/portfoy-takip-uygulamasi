@@ -1,4 +1,5 @@
 import enum
+from decimal import Decimal
 
 from sqlalchemy import Column, Date, Enum, ForeignKey, Integer, Numeric, String
 from sqlalchemy.orm import relationship
@@ -32,8 +33,13 @@ class Transaction(Base):
     asset = relationship("Asset", back_populates="transactions")
     portfolio = relationship("Portfolio", back_populates="transactions")
     import_batch = relationship("ImportBatch", back_populates="transactions")
+    dividend_plan = relationship(
+        "DividendPlan",
+        back_populates="linked_transaction",
+        uselist=False,
+    )
 
     @property
     def total_cost(self):
-        base_amount = float(self.quantity) * float(self.unit_price)
-        return base_amount + float(self.commission) + float(self.tax)
+        base_amount = Decimal(str(self.quantity)) * Decimal(str(self.unit_price))
+        return base_amount + Decimal(str(self.commission)) + Decimal(str(self.tax))

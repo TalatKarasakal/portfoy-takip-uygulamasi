@@ -4,7 +4,7 @@ from decimal import Decimal
 import pytest
 
 from app.models.transaction import Transaction, TransactionType
-from app.services.portfolio_service import PortfolioService
+from app.services.portfolio_service import PortfolioService, XirrStatus
 
 
 class MockAsset:
@@ -87,8 +87,9 @@ def test_xirr_calculation():
     t0 = datetime.date(2023, 1, 1)
     t1 = datetime.date(2024, 1, 1)
     cash_flows = [(t0, -1000.0), (t1, 1100.0)]
-    rate = PortfolioService.calculate_xirr(cash_flows)
-    assert 0.09 < rate < 0.11 # ~10%
+    result = PortfolioService.calculate_xirr(cash_flows)
+    assert result.status == XirrStatus.SUCCESS
+    assert result.rate is not None and 0.09 < result.rate < 0.11
 
 
 def test_full_exit_keeps_realized_pnl():
@@ -164,10 +165,10 @@ def test_split_fifo():
 
 def test_monthly_returns():
     history = [
-        {"date": datetime.date(2024, 1, 31), "total_value_try": 1000.0},
-        {"date": datetime.date(2024, 2, 29), "total_value_try": 1100.0},  # +%10
-        {"date": datetime.date(2024, 3, 31), "total_value_try": 990.0},   # -%10
-        {"date": datetime.date(2024, 5, 31), "total_value_try": 1200.0},  # Nisan boş -> atlanır
+        {"date": datetime.date(2024, 1, 31), "total_value_try": 1000.0, "calculation_version": 2},
+        {"date": datetime.date(2024, 2, 29), "total_value_try": 1100.0, "calculation_version": 2},
+        {"date": datetime.date(2024, 3, 31), "total_value_try": 990.0, "calculation_version": 2},
+        {"date": datetime.date(2024, 5, 31), "total_value_try": 1200.0, "calculation_version": 2},
     ]
     r = PortfolioService.monthly_returns(history)
     assert abs(r[(2024, 2)] - 10.0) < 1e-6
@@ -176,3 +177,66 @@ def test_monthly_returns():
     assert (2024, 5) not in r
     # Ocak'ın öncesi yok
     assert (2024, 1) not in r
+
+
+def test_xirr_requires_both_cash_flow_signs():
+    result = PortfolioService.calculate_xirr(
+        [
+            (datetime.date(2024, 1, 1), 100),
+            (datetime.date(2025, 1, 1), 110),
+        ]
+    )
+    assert result.status == XirrStatus.UNAVAILABLE
+    assert result.rate is None
+
+
+def test_xirr_reports_multiple_roots_as_ambiguous():
+    result = PortfolioService.calculate_xirr(
+        [
+            (datetime.date(2022, 1, 1), -100),
+            (datetime.date(2023, 1, 1), 230),
+            (datetime.date(2024, 1, 1), -132),
+        ]
+    )
+    assert result.status == XirrStatus.AMBIGUOUS
+    assert result.rate is None
+    assert len(result.roots) >= 2
+
+
+def test_twr_is_neutral_to_external_deposit():
+    history = [
+        {
+            "date": datetime.date(2024, 1, 1),
+            "total_value_try": 1000,
+            "net_external_flow_try": 0,
+            "calculation_version": 2,
+        },
+        {
+            "date": datetime.date(2024, 1, 2),
+            "total_value_try": 1500,
+            "net_external_flow_try": 500,
+            "calculation_version": 2,
+        },
+    ]
+    assert PortfolioService.calculate_twr(history) == 0.0
+
+
+def test_twr_does_not_claim_reliability_for_legacy_snapshots():
+    history = [
+        {"date": datetime.date(2024, 1, 1), "total_value_try": 1000},
+        {"date": datetime.date(2024, 1, 2), "total_value_try": 1200},
+    ]
+    assert PortfolioService.calculate_twr(history) is None
+
+
+def test_fifo_returns_open_lots_and_sale_matches(transactions):
+    for tx_id, transaction in enumerate(transactions, start=1):
+        transaction.id = tx_id
+    result = PortfolioService.calculate_cost_and_pnl(
+        transactions, current_price=160, method="FIFO"
+    )
+    assert len(result.lot_matches) == 2
+    assert [match.buy_transaction_id for match in result.lot_matches] == [1, 2]
+    assert result.lot_matches[0].sale_transaction_id == 3
+    assert len(result.open_lots) == 1
+    assert result.open_lots[0].quantity == Decimal("15")

@@ -137,6 +137,7 @@ class MainWindow(QMainWindow):
         self.portfolio_vm.portfolios_loaded.connect(self._on_portfolios_loaded)
         self.portfolio_vm.portfolio_selection_changed.connect(self.transaction_vm.set_portfolio)
         self.portfolio_vm.portfolio_selection_changed.connect(self.ai_vm.set_portfolio)
+        self.portfolio_vm.portfolio_selection_changed.connect(self.analytics_vm.set_portfolio)
         self.portfolio_selector.currentIndexChanged.connect(self._on_portfolio_selected)
         self.add_portfolio_btn.clicked.connect(self._create_portfolio)
 
@@ -262,8 +263,7 @@ class MainWindow(QMainWindow):
             self.refresh_timer.stop()
 
     def _refresh_analytics(self, kpi_data):
-        items = kpi_data.get("portfolio_items", [])
-        self.analytics_vm.load_analytics_data(items)
+        self.analytics_vm.load_analytics_data(kpi_data)
 
     def _check_alerts(self, kpi_data):
         """Güncel fiyatlardan bir fiyat haritası kurup uyarıları değerlendirir."""
@@ -289,7 +289,7 @@ class MainWindow(QMainWindow):
             idx = self.stacked_widget.indexOf(self.views[tab_id])
             self.stacked_widget.setCurrentIndex(idx)
             if tab_id == "analytics":
-                self.analytics_vm.load_analytics_data(self.portfolio_vm.cached_portfolio_data)
+                self.analytics_vm.load_analytics_data(self.portfolio_vm.cached_kpi_data)
             elif tab_id == "alerts" and hasattr(self.views["alerts"], "refresh"):
                 self.views["alerts"].refresh()
             elif tab_id == "assistant":

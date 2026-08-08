@@ -114,33 +114,46 @@ class SnapshotService:
         """Portföy snapshot'larını tarih bazında konsolide eder."""
         rows = SnapshotService.get_history(
             session,
-            days=days,
+            days=None,
             portfolio_id=None,
             calculation_version=calculation_version,
         )
-        grouped: Dict[datetime.date, Dict[str, Any]] = {}
+        by_date: Dict[datetime.date, List[Dict[str, Any]]] = {}
         for row in rows:
-            target = grouped.setdefault(
-                row["date"],
-                {
-                    "date": row["date"],
-                    "total_value_try": 0.0,
-                    "total_value_usd": 0.0,
-                    "total_cost_try": 0.0,
-                    "unrealized_pnl_try": 0.0,
-                    "cash_balance_try": 0.0,
-                    "net_external_flow_try": 0.0,
-                    "calculation_version": row["calculation_version"],
-                    "portfolio_id": None,
-                },
-            )
-            for key in (
-                "total_value_try",
-                "total_value_usd",
-                "total_cost_try",
-                "unrealized_pnl_try",
-                "cash_balance_try",
-                "net_external_flow_try",
-            ):
-                target[key] += row[key]
-        return [grouped[key] for key in sorted(grouped)]
+            by_date.setdefault(row["date"], []).append(row)
+
+        latest_by_portfolio: Dict[int, Dict[str, Any]] = {}
+        consolidated: List[Dict[str, Any]] = []
+        for snapshot_date in sorted(by_date):
+            daily_rows = by_date[snapshot_date]
+            for row in daily_rows:
+                latest_by_portfolio[row["portfolio_id"]] = row
+            versions = [row["calculation_version"] for row in latest_by_portfolio.values()]
+            target = {
+                "date": snapshot_date,
+                "total_value_try": 0.0,
+                "total_value_usd": 0.0,
+                "total_cost_try": 0.0,
+                "unrealized_pnl_try": 0.0,
+                "cash_balance_try": 0.0,
+                "net_external_flow_try": sum(
+                    row["net_external_flow_try"] for row in daily_rows
+                ),
+                "calculation_version": min(versions) if versions else 1,
+                "portfolio_id": None,
+            }
+            # O gün snapshot'ı olmayan portföy için son bilinen değeri ileri taşı.
+            for row in latest_by_portfolio.values():
+                for key in (
+                    "total_value_try",
+                    "total_value_usd",
+                    "total_cost_try",
+                    "unrealized_pnl_try",
+                    "cash_balance_try",
+                ):
+                    target[key] += row[key]
+            consolidated.append(target)
+        if days is not None:
+            cutoff = datetime.date.today() - datetime.timedelta(days=days)
+            consolidated = [row for row in consolidated if row["date"] >= cutoff]
+        return consolidated

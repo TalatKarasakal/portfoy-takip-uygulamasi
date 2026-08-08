@@ -9,9 +9,11 @@ from sqlalchemy.orm import sessionmaker
 import app.models  # noqa: F401
 from app.database.base import Base
 from app.models.asset import Asset, AssetType
+from app.models.dividend_plan import DividendPlan
 from app.models.import_batch import ImportBatch, ImportBatchStatus
 from app.models.portfolio import CashEntryType, Portfolio
 from app.models.transaction import Transaction, TransactionType
+from app.services.dividend_service import DividendService
 from app.services.import_export_service import (
     ImportExportService,
     ImportRowStatus,
@@ -62,6 +64,9 @@ def test_real_excel_round_trip_preserves_all_entities(db_session, tmp_path):
         db_session, 1, CashEntryType.DEPOSIT, datetime.date(2024, 1, 1), 2000, "Başlangıç"
     )
     PortfolioAccountService.add_to_watchlist(db_session, 1, asset.id, "150.123456", "Hedef")
+    DividendService.add_plan(
+        db_session, 1, asset.id, datetime.date(2024, 2, 1), "3.123456", "15", "Plan"
+    )
     db_session.commit()
 
     workbook = tmp_path / "roundtrip.xlsx"
@@ -74,11 +79,16 @@ def test_real_excel_round_trip_preserves_all_entities(db_session, tmp_path):
     target.commit()
     preview = ImportExportService.preview_excel(target, str(workbook), 1)
     assert not preview.has_errors
-    assert {row.entity for row in preview.rows} == {"transaction", "cash", "watchlist"}
+    assert {row.entity for row in preview.rows} == {
+        "transaction",
+        "cash",
+        "watchlist",
+        "dividend_plan",
+    }
     result = ImportExportService.apply_preview(target, preview)
     target.commit()
 
-    assert result.imported_count == 6
+    assert result.imported_count == 7
     imported = target.query(Transaction).order_by(Transaction.id).all()
     assert [row.transaction_type for row in imported] == [
         TransactionType.BUY,
@@ -91,6 +101,7 @@ def test_real_excel_round_trip_preserves_all_entities(db_session, tmp_path):
     assert imported[-1].note == "Net temettü"
     assert target.query(ImportBatch).one().status == ImportBatchStatus.APPLIED
     assert len(PortfolioAccountService.list_watchlist(target, 1)) == 1
+    assert target.query(DividendPlan).one().gross_per_share == Decimal("3.123456")
     target.close()
     target_engine.dispose()
 
