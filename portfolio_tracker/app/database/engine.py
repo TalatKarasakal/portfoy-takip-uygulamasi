@@ -1,25 +1,30 @@
-from sqlalchemy import create_engine
+"""SQLAlchemy engine ve uygulama şema başlangıcı."""
+
+from __future__ import annotations
+
+from sqlalchemy import create_engine, event
 
 from app.config import DATABASE_URL
-from app.database.base import Base
 
 engine = create_engine(
     DATABASE_URL,
     echo=False,
-    connect_args={"check_same_thread": False}
+    connect_args={"check_same_thread": False, "timeout": 5.0},
 )
 
-def init_db():
-    # SQLAlchemy mapper'ının tüm tabloları tanıması için modeller, create_all'dan
-    # ÖNCE import edilmeli (yan-etki importu). Aksi halde "failed to locate a name"
-    # hatası alınır. noqa: ruff bunları "kullanılmıyor" sanmasın.
-    from app.models import (  # noqa: F401
-        Alert,
-        Asset,
-        PortfolioSnapshot,
-        PriceHistory,
-        Settings,
-        Transaction,
-    )
 
-    Base.metadata.create_all(bind=engine)
+@event.listens_for(engine, "connect")
+def _configure_sqlite_connection(dbapi_connection, _connection_record) -> None:
+    cursor = dbapi_connection.cursor()
+    try:
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.execute("PRAGMA busy_timeout=5000")
+    finally:
+        cursor.close()
+
+
+def init_db(*, migration_approved: bool = False):
+    """Şemayı create_all yerine sürümlü Alembic migration ile hazırlar."""
+    from app.database.migration_service import MigrationService
+
+    return MigrationService.ensure_current(engine, approved=migration_approved)

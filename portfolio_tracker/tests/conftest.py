@@ -14,3 +14,10 @@ import app.models.portfolio_snapshot  # noqa: F401
 import app.models.price_history  # noqa: F401
 import app.models.settings  # noqa: F401
 import app.models.transaction  # noqa: F401
+
+
+def dispose_session_engine(session) -> None:
+    """Geçici SQLAlchemy kaynaklarını uyarı bırakmadan kapatır."""
+    bind = session.get_bind()
+    session.close()
+    bind.dispose()

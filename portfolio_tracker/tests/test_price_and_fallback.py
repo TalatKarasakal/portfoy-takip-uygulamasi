@@ -1,6 +1,7 @@
 import datetime
 
 import pytest
+from conftest import dispose_session_engine
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -17,7 +18,7 @@ def session():
     Base.metadata.create_all(engine)
     s = sessionmaker(bind=engine)()
     yield s
-    s.close()
+    dispose_session_engine(s)
 
 
 def _add_asset(session):

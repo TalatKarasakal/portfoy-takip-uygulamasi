@@ -1,10 +1,10 @@
 import enum
-from datetime import datetime
 
-from sqlalchemy import Column, DateTime, Enum, Integer, String
+from sqlalchemy import Column, Enum, Integer, String
 from sqlalchemy.orm import relationship
 
 from app.database.base import Base
+from app.database.types import UTCDateTime, utc_now
 
 
 class AssetType(enum.Enum):
@@ -19,8 +19,8 @@ class Asset(Base):
     name = Column(String(255), nullable=False)
     asset_type = Column(Enum(AssetType), nullable=False)
     currency = Column(String(10), default="TRY", nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(UTCDateTime, default=utc_now)
+    updated_at = Column(UTCDateTime, default=utc_now, onupdate=utc_now)
 
     transactions = relationship("Transaction", back_populates="asset", cascade="all, delete-orphan")
     price_histories = relationship("PriceHistory", back_populates="asset", cascade="all, delete-orphan")

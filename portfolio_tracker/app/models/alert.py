@@ -1,10 +1,10 @@
 import enum
-from datetime import datetime
 
-from sqlalchemy import Boolean, Column, DateTime, Enum, ForeignKey, Integer, Numeric
+from sqlalchemy import Boolean, Column, Enum, ForeignKey, Integer, Numeric
 from sqlalchemy.orm import relationship
 
 from app.database.base import Base
+from app.database.types import UTCDateTime, utc_now
 
 
 class AlertType(enum.Enum):
@@ -21,7 +21,7 @@ class Alert(Base):
     alert_type = Column(Enum(AlertType), nullable=False)
     threshold = Column(Numeric(precision=18, scale=6), nullable=False)
     is_active = Column(Boolean, default=True)
-    triggered_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    triggered_at = Column(UTCDateTime, nullable=True)
+    created_at = Column(UTCDateTime, default=utc_now)
 
     asset = relationship("Asset", back_populates="alerts")

@@ -1,10 +1,10 @@
 import enum
-from datetime import datetime
 
-from sqlalchemy import Column, Date, DateTime, Enum, ForeignKey, Integer, Numeric, String
+from sqlalchemy import Column, Date, Enum, ForeignKey, Integer, Numeric, String
 from sqlalchemy.orm import relationship
 
 from app.database.base import Base
+from app.database.types import UTCDateTime, utc_now
 
 
 class TransactionType(enum.Enum):
@@ -25,7 +25,7 @@ class Transaction(Base):
     commission = Column(Numeric(precision=18, scale=6), default=0, nullable=False)
     tax = Column(Numeric(precision=18, scale=6), default=0, nullable=False)
     note = Column(String(500), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(UTCDateTime, default=utc_now)
 
     asset = relationship("Asset", back_populates="transactions")
 

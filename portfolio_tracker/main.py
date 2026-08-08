@@ -2,9 +2,10 @@ import os
 import sys
 
 from PySide6.QtGui import QIcon
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QMessageBox
 
-from app.database.engine import init_db
+from app.database.engine import engine, init_db
+from app.database.migration_service import MigrationError, MigrationService
 from app.services.backup_service import BackupService
 from app.utils.logger import app_logger
 from app.views.main_window import MainWindow
@@ -17,8 +18,33 @@ def main():
     # macOS Dock adını GUI başlamadan önce ayarlamayı dene ("python" yerine).
     set_dock_name("Portföy Takip")
 
-    # İlk kullanım için veritabanını ilklendir
-    init_db()
+    app = QApplication(sys.argv)
+    app.setApplicationName("Portföy Takip ve Analiz")
+    app.setApplicationDisplayName("Portföy Takip")
+    app.setOrganizationName("PortfolioTracker")
+    app.setWindowIcon(QIcon(_ICON_PATH))
+
+    # Şema değişikliği mevcut kullanıcı verisine uygulanmadan önce açık onay al.
+    try:
+        migration_plan = MigrationService.inspect_plan(engine)
+        approved = not migration_plan.requires_backup
+        if migration_plan.requires_backup:
+            answer = QMessageBox.question(
+                None,
+                "Veritabanı Güncellemesi",
+                migration_plan.summary
+                + "\n\nİşlemden önce doğrulanmış güvenlik yedeği alınacak. Devam edilsin mi?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+            approved = answer == QMessageBox.Yes
+        if not approved:
+            return
+        init_db(migration_approved=approved)
+    except MigrationError as exc:
+        app_logger.critical("Veritabanı hazırlanamadı: %s", exc)
+        QMessageBox.critical(None, "Veritabanı Hatası", str(exc))
+        return
 
     # Açılışta otomatik yedek (son yedekten 7 gün geçtiyse)
     try:
@@ -26,11 +52,6 @@ def main():
     except Exception as e:
         app_logger.error(f"Açılış yedeği atlandı: {e}")
 
-    app = QApplication(sys.argv)
-    app.setApplicationName("Portföy Takip ve Analiz")
-    app.setApplicationDisplayName("Portföy Takip")
-    app.setOrganizationName("PortfolioTracker")
-    app.setWindowIcon(QIcon(_ICON_PATH))
     # Dock simgesini çalışma anında ayarla (python ile açınca da görünür).
     set_dock_icon(_ICON_PATH)
 
