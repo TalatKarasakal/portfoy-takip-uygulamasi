@@ -7,12 +7,13 @@ from app.models.portfolio_snapshot import PortfolioSnapshot
 from app.models.price_history import PriceHistory
 from app.models.settings import Settings
 from app.models.transaction import Transaction
+from app.services.ai.llm_provider import get_provider
 from app.services.backup_service import BackupService
-from app.services.import_export_service import ImportExportService
+from app.services.import_export_service import PORTFOLIO_EXPORT_COLUMNS, ImportExportService
 from app.services.report_service import export_cashflow_excel
 from app.services.secret_service import SecretService, SecretStoreError
 from app.utils.app_settings import CLOUD_CONSENT_VERSION, DEFAULT_SETTINGS
-from app.utils.logger import app_logger
+from app.viewmodels.worker import FunctionWorker, stop_worker
 
 
 class SettingsViewModel(QObject):
@@ -24,9 +25,37 @@ class SettingsViewModel(QObject):
     data_changed = Signal()                 # import sonrası portföyü tazele
     percentage_import_needed = Signal(str)  # (dosya yolu) — toplam değer sorulmalı
     import_preview_ready = Signal(object)
+    provider_tested = Signal(dict)
+    busy_changed = Signal(str, bool)
+    task_progress = Signal(str, int)
 
     # Hassas olmayan varsayılanlar app_settings'te; API anahtarları sistem kasasındadır.
     default_settings = DEFAULT_SETTINGS
+    export_columns = PORTFOLIO_EXPORT_COLUMNS
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._workers: dict[str, FunctionWorker] = {}
+
+    def _run_task(self, tag, task, on_success) -> None:
+        current = self._workers.get(tag)
+        if current is not None and current.isRunning():
+            return
+        worker = FunctionWorker(tag, task)
+        worker.result_ready.connect(lambda _tag, result: on_success(result))
+        worker.error_occurred.connect(self._on_task_error)
+        worker.progress_changed.connect(self.task_progress.emit)
+        worker.finished.connect(lambda task_tag=tag: self._finish_task(task_tag))
+        self._workers[tag] = worker
+        self.busy_changed.emit(tag, True)
+        worker.start()
+
+    def _on_task_error(self, tag: str, message: str) -> None:
+        self.error_occurred.emit(f"{tag}: {message}")
+
+    def _finish_task(self, tag: str) -> None:
+        self._workers.pop(tag, None)
+        self.busy_changed.emit(tag, False)
 
     def load_settings(self):
         try:
@@ -91,116 +120,148 @@ class SettingsViewModel(QObject):
     def export_data(
         self, file_path: str, columns=None, portfolio_items=None, portfolio_id=1
     ):
-        try:
+        selected_columns = tuple(columns or ())
+        render_items = tuple(dict(item) for item in (portfolio_items or ()))
+
+        def task():
             with get_session() as session:
                 ImportExportService.export_excel(
                     session,
                     file_path,
-                    portfolio_items=portfolio_items,
-                    columns=columns,
+                    portfolio_items=list(render_items),
+                    columns=list(selected_columns),
                     portfolio_id=portfolio_id,
                 )
-            self.success_message.emit("Dışa aktarma işlemi başarıyla tamamlandı.")
-        except Exception as e:
-            self.error_occurred.emit(f"Dışa aktarma hatası: {str(e)}")
+            return "Dışa aktarma işlemi başarıyla tamamlandı."
+
+        self._run_task("Dışa aktarma", task, self.success_message.emit)
 
     def import_data(self, file_path: str, portfolio_id: int = 1):
-        # Yüzdelik senaryosu toplam değer gerektirir; view'a sinyal gönderilir.
-        try:
+        def task():
             if ImportExportService.detect_percentage(file_path):
-                self.percentage_import_needed.emit(file_path)
-                return
-        except Exception as e:
-            self.error_occurred.emit(f"İçeri aktarma hatası: {str(e)}")
-            return
-
-        try:
+                return ("percentage", file_path)
             with get_session() as session:
-                preview = ImportExportService.preview_excel(session, file_path, portfolio_id)
-            self.import_preview_ready.emit(preview)
-        except Exception as e:
-            self.error_occurred.emit(f"İçeri aktarma önizleme hatası: {str(e)}")
+                return ("preview", ImportExportService.preview_excel(session, file_path, portfolio_id))
+
+        def on_success(result):
+            result_type, payload = result
+            if result_type == "percentage":
+                self.percentage_import_needed.emit(payload)
+            else:
+                self.import_preview_ready.emit(payload)
+
+        self._run_task("İçe aktarma önizlemesi", task, on_success)
 
     def apply_import_preview(self, preview, selected_rows):
-        try:
+        selected = tuple(selected_rows)
+
+        def task():
             with get_session() as session:
                 with session.begin():
-                    result = ImportExportService.apply_preview(
-                        session, preview, selected_rows
-                    )
+                    return ImportExportService.apply_preview(session, preview, selected)
+
+        def on_success(result):
             self.success_message.emit(
                 f"{result.imported_count} kayıt içe aktarıldı. Batch: {result.batch_id}"
             )
             self.data_changed.emit()
-        except Exception as e:
-            self.error_occurred.emit(f"İçeri aktarma hatası: {str(e)}")
+
+        self._run_task("İçe aktarma", task, on_success)
 
     def undo_last_import(self, portfolio_id=None):
-        try:
+        def task():
             with get_session() as session:
                 with session.begin():
-                    count = ImportExportService.undo_last_import(session, portfolio_id)
+                    return ImportExportService.undo_last_import(session, portfolio_id)
+
+        def on_success(count):
             self.success_message.emit(f"Son içe aktarım geri alındı ({count} kayıt).")
             self.data_changed.emit()
-        except Exception as e:
-            self.error_occurred.emit(f"İçe aktarım geri alınamadı: {str(e)}")
+
+        self._run_task("İçe aktarımı geri alma", task, on_success)
 
     def import_percentage(self, file_path: str, total_value: float, portfolio_id: int = 1):
-        try:
+        def task():
             with get_session() as session:
-                success = ImportExportService.import_percentage(
+                return ImportExportService.import_percentage(
                     session, file_path, total_value, portfolio_id
                 )
+
+        def on_success(success):
             if success:
                 self.success_message.emit("Yüzdelik portföy başarıyla içeri aktarıldı.")
                 self.data_changed.emit()
             else:
                 self.error_occurred.emit("Yüzdelik içeri aktarma başarısız oldu.")
-        except Exception as e:
-            self.error_occurred.emit(f"Yüzdelik içeri aktarma hatası: {str(e)}")
+
+        self._run_task("Yüzdelik içe aktarma", task, on_success)
 
     def export_cashflow_report(self, file_path: str):
-        try:
+        def task():
             with get_session() as session:
-                ok = export_cashflow_excel(session, file_path)
+                return export_cashflow_excel(session, file_path)
+
+        def on_success(ok):
             if ok:
                 self.success_message.emit("Aylık nakit akışı raporu oluşturuldu.")
             else:
                 self.error_occurred.emit("Rapor için işlem kaydı bulunamadı.")
-        except Exception as e:
-            self.error_occurred.emit(f"Rapor hatası: {str(e)}")
+
+        self._run_task("Rapor", task, on_success)
 
     def create_backup(self):
-        try:
-            result = BackupService.create_backup()
+        def on_success(result):
             if result:
                 self.success_message.emit(f"Veritabanı yedeği doğrulandı: {result.path}")
             else:
                 self.error_occurred.emit(result.error or "Yedek alınamadı.")
-        except Exception as e:
-            self.error_occurred.emit(f"Yedekleme hatası: {str(e)}")
+
+        self._run_task("Yedekleme", BackupService.create_backup, on_success)
 
     def restore_backup(self, path: str):
-        try:
-            result = BackupService.restore_backup(path)
+        def on_success(result):
             if result:
                 self.success_message.emit("Veritabanı başarıyla geri yüklendi. Uygulamayı yeniden başlatın.")
             else:
                 self.error_occurred.emit(result.error or "Geri yükleme başarısız oldu.")
-        except Exception as e:
-            self.error_occurred.emit(f"Geri yükleme hatası: {str(e)}")
+
+        self._run_task("Geri yükleme", lambda: BackupService.restore_backup(path), on_success)
+
+    def test_ai_provider(self, settings: dict, gemini_api_key: str = "") -> None:
+        safe_settings = dict(settings)
+
+        def task():
+            provider = get_provider(
+                safe_settings,
+                **({"gemini_api_key": gemini_api_key} if gemini_api_key else {}),
+            )
+            if provider is None:
+                return {"name": "none", "available": False, "models": []}
+            available = provider.is_available()
+            models = provider.list_models() if hasattr(provider, "list_models") else []
+            return {"name": provider.name, "available": available, "models": models}
+
+        self._run_task("Sağlayıcı bağlantı testi", task, self.provider_tested.emit)
+
+    def cancel_task(self, tag: str) -> None:
+        worker = self._workers.get(tag)
+        if worker is not None:
+            worker.requestInterruption()
+
+    def shutdown(self) -> None:
+        for worker in list(self._workers.values()):
+            stop_worker(worker)
+        self._workers.clear()
 
     def delete_all_data(self):
         """Tüm portföy verisini siler. Güvenlik için önce otomatik yedek alınır."""
-        try:
-            # Silmeden önce güvenlik yedeği
+        def task():
             backup_result = BackupService.create_backup()
             if not backup_result:
-                self.error_occurred.emit(
+                raise RuntimeError(
                     "Güvenlik yedeği alınamadığı için hiçbir veri silinmedi. "
                     + backup_result.error
                 )
-                return
             with get_session() as session:
                 # Sıra önemli değil (cascade var) ama açıkça temizleyelim
                 session.query(Alert).delete()
@@ -209,8 +270,10 @@ class SettingsViewModel(QObject):
                 session.query(PortfolioSnapshot).delete()
                 session.query(Asset).delete()
                 session.commit()
-            self.success_message.emit("Tüm veri silindi. (Silmeden önce otomatik yedek alındı.)")
+            return "Tüm veri silindi. (Silmeden önce otomatik yedek alındı.)"
+
+        def on_success(message):
+            self.success_message.emit(message)
             self.data_wiped.emit()
-        except Exception as e:
-            app_logger.error(f"Veri silme hatası: {e}")
-            self.error_occurred.emit(f"Veri silme hatası: {str(e)}")
+
+        self._run_task("Tüm veriyi silme", task, on_success)

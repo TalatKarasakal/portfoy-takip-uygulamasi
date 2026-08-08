@@ -290,3 +290,17 @@ class MainWindow(QMainWindow):
             elif tab_id == "assistant":
                 # Asistan sekmesi açıldığında AI durumunu ve varlık listesini tazele
                 self.views["assistant"].refresh_state()
+
+    def closeEvent(self, event):
+        """Zamanlayıcıyı ve bütün ViewModel işçilerini kontrollü biçimde kapatır."""
+        self.refresh_timer.stop()
+        for view_model in (
+            self.portfolio_vm,
+            self.transaction_vm,
+            self.analytics_vm,
+            self.settings_vm,
+            self.ai_vm,
+            self.alerts_vm,
+        ):
+            view_model.shutdown()
+        super().closeEvent(event)

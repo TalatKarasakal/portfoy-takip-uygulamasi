@@ -4,14 +4,21 @@ from PySide6.QtCore import QObject, Signal
 
 from app.database.session import get_session
 from app.models.transaction import Transaction, TransactionType
+from app.services.benchmark_service import BenchmarkService
 from app.services.portfolio_service import PortfolioService
 from app.services.snapshot_service import SnapshotService
 from app.utils.logger import app_logger
+from app.viewmodels.worker import FunctionWorker, stop_worker
 
 
 class AnalyticsViewModel(QObject):
     analytics_loaded = Signal(dict)
+    benchmark_loaded = Signal(dict)
     error_occurred = Signal(str)
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._benchmark_worker: FunctionWorker | None = None
 
     def load_analytics_data(self, portfolio_items: list):
         """portfolio_items: PortfolioViewModel'dan hesaplanmış güncel liste"""
@@ -74,7 +81,29 @@ class AnalyticsViewModel(QObject):
                     "sharpe": metrics["sharpe"],
                     "volatility": metrics["volatility"],
                     "max_drawdown": metrics["max_drawdown"],
+                    "monthly_returns": PortfolioService.monthly_returns(history),
                 })
         except Exception as e:
             app_logger.error(f"Analytics load error: {e}")
             self.error_occurred.emit(str(e))
+
+    def load_benchmark(self, start: datetime.date, end: datetime.date) -> None:
+        if self._benchmark_worker is not None and self._benchmark_worker.isRunning():
+            return
+        request = (start, end)
+        worker = FunctionWorker(
+            "benchmark",
+            lambda: BenchmarkService.fetch_series(request[0], request[1]),
+        )
+        worker.result_ready.connect(lambda _tag, result: self.benchmark_loaded.emit(result or {}))
+        worker.error_occurred.connect(lambda _tag, message: self.error_occurred.emit(message))
+        worker.finished.connect(self._clear_benchmark_worker)
+        self._benchmark_worker = worker
+        worker.start()
+
+    def _clear_benchmark_worker(self) -> None:
+        self._benchmark_worker = None
+
+    def shutdown(self) -> None:
+        stop_worker(self._benchmark_worker)
+        self._benchmark_worker = None

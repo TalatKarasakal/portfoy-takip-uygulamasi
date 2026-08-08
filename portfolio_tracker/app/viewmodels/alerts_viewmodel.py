@@ -154,3 +154,6 @@ class AlertsViewModel(QObject):
             notification.notify(title=f"Portföy Uyarısı: {title}", message=message, timeout=10)
         except Exception as e:  # plyer kurulu değil veya platform desteklemiyor
             app_logger.info(f"Bildirim gönderilemedi ({title}: {message}) - {e}")
+
+    def shutdown(self) -> None:
+        """Bu ViewModel arka plan işçisi tutmaz; ortak kapanış sözleşmesini uygular."""

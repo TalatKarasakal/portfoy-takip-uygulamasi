@@ -37,9 +37,12 @@ class AIWorker(QThread):
         self.fn = fn
 
     def run(self) -> None:
+        if self.isInterruptionRequested():
+            return
         try:
             result = self.fn()
-            self.result_signal.emit(self.tag, result)
+            if not self.isInterruptionRequested():
+                self.result_signal.emit(self.tag, result)
         except Exception as e:
             app_logger.error(f"AI işlemi hatası ({self.tag}): {e}")
             self.error_signal.emit(self.tag, redact_sensitive(e))
@@ -267,6 +270,7 @@ class AIViewModel(QObject):
                 "code": asset_code,
                 "indicators": ind,
                 "anomalies": anomalies,
+                "anomaly_description": anomaly.describe_anomalies(anomalies),
                 "history": records,
             }
 
@@ -387,3 +391,10 @@ class AIViewModel(QObject):
         except Exception as e:
             app_logger.error(f"Varlık listesi alınamadı: {e}")
             return []
+
+    def shutdown(self) -> None:
+        for worker in list(self._workers):
+            if worker.isRunning():
+                worker.requestInterruption()
+                worker.wait(5000)
+        self._workers = [worker for worker in self._workers if worker.isRunning()]

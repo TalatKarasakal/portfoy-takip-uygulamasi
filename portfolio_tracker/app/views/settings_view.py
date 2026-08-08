@@ -1,7 +1,4 @@
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QCursor
 from PySide6.QtWidgets import (
-    QApplication,
     QCheckBox,
     QComboBox,
     QDialog,
@@ -23,7 +20,6 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from app.services.import_export_service import PORTFOLIO_EXPORT_COLUMNS, ImportRowStatus
 from app.utils.app_settings import CLOUD_CONSENT_VERSION, CLOUD_DATA_FIELDS
 
 APP_VERSION = "1.0.0"
@@ -39,7 +35,7 @@ RISK_PROFILE_LABELS = {
 class ExportColumnsDialog(QDialog):
     """Dışa aktarılacak portföy sütunlarını seçtiren diyalog."""
 
-    def __init__(self, parent=None):
+    def __init__(self, columns, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Dışa Aktarılacak Sütunlar")
         self.setMinimumWidth(320)
@@ -47,7 +43,7 @@ class ExportColumnsDialog(QDialog):
         layout.addWidget(QLabel("Portföy sayfasına eklenecek sütunlar:"))
 
         self.checks = {}
-        for col in PORTFOLIO_EXPORT_COLUMNS:
+        for col in columns:
             cb = QCheckBox(col)
             cb.setChecked(True)
             self.checks[col] = cb
@@ -90,7 +86,7 @@ class ImportPreviewDialog(QDialog):
         for index, row in enumerate(preview.rows):
             checkbox = QCheckBox()
             checkbox.setChecked(row.selected)
-            checkbox.setEnabled(row.status != ImportRowStatus.ERROR)
+            checkbox.setEnabled(row.status.value != "hatalı")
             self._checks.append(checkbox)
             self.table.setCellWidget(index, 0, checkbox)
             self.table.setItem(index, 1, QTableWidgetItem(row.status.value))
@@ -270,6 +266,7 @@ class SettingsView(QWidget):
         self.view_model.error_occurred.connect(self.on_error)
         self.view_model.percentage_import_needed.connect(self.on_percentage_import_needed)
         self.view_model.import_preview_ready.connect(self.on_import_preview_ready)
+        self.view_model.provider_tested.connect(self.on_provider_tested)
         # Not: load_settings() MainWindow tarafından kurulum tamamlandıktan sonra
         # çağrılır; burada çağırmak view'lar/timer hazır olmadan sinyal tetikler.
 
@@ -355,43 +352,27 @@ class SettingsView(QWidget):
         }
 
     def on_test_ai_clicked(self):
-        """Seçili sağlayıcıya bağlantıyı dener; varsa model listesini gösterir.
-
-        Formdaki güncel değerlerle test eder, böylece kullanıcı kaydetmeden
-        önce yapılandırmayı doğrulayabilir.
-        """
-        from app.services.ai.llm_provider import get_provider
-
+        """Form değerleriyle asenkron sağlayıcı testi başlatır."""
         entered_key = self.ai_gemini_key_edit.text().strip()
-        try:
-            provider = get_provider(
-                self._current_ai_form_settings(),
-                **({"gemini_api_key": entered_key} if entered_key else {}),
-            )
-        except Exception as exc:
-            QMessageBox.warning(self, "Bağlantı Testi", str(exc))
-            return
-        if provider is None:
+        if self.ai_provider_combo.currentText() == "none":
             QMessageBox.information(
                 self, "Yapay Zeka",
                 "Sağlayıcı 'none' seçili. Önce ollama, local veya gemini seçin."
             )
             return
+        self.view_model.test_ai_provider(self._current_ai_form_settings(), entered_key)
 
-        QApplication.setOverrideCursor(QCursor(Qt.WaitCursor))
-        try:
-            available = provider.is_available()
-            models = provider.list_models() if hasattr(provider, "list_models") else []
-        finally:
-            QApplication.restoreOverrideCursor()
-
+    def on_provider_tested(self, result: dict):
+        available = result["available"]
+        models = result["models"]
+        provider_name = result["name"]
         if available:
-            msg = f"'{provider.name}' sağlayıcısına bağlantı başarılı."
+            msg = f"'{provider_name}' sağlayıcısına bağlantı başarılı."
             if models:
                 shown = ", ".join(models[:10])
                 more = f" (+{len(models) - 10} model daha)" if len(models) > 10 else ""
                 msg += f"\n\nYüklü modeller: {shown}{more}"
-            elif provider.name in ("ollama", "local"):
+            elif provider_name in ("ollama", "local"):
                 msg += (
                     "\n\nAncak yüklü model görünmüyor. Bir model indirin "
                     "(örn. 'ollama pull llama3.1')."
@@ -407,8 +388,8 @@ class SettingsView(QWidget):
             }
             QMessageBox.warning(
                 self, "Bağlantı Testi",
-                f"'{provider.name}' sağlayıcısına ulaşılamadı.\n\n"
-                + tips.get(provider.name, "")
+                f"'{provider_name}' sağlayıcısına ulaşılamadı.\n\n"
+                + tips.get(provider_name, "")
             )
 
     def on_backup_clicked(self):
@@ -426,7 +407,7 @@ class SettingsView(QWidget):
                 self.view_model.restore_backup(path)
 
     def on_export_clicked(self):
-        col_dialog = ExportColumnsDialog(self)
+        col_dialog = ExportColumnsDialog(self.view_model.export_columns, self)
         if not col_dialog.exec():
             return
         columns = col_dialog.selected_columns()
@@ -469,13 +450,8 @@ class SettingsView(QWidget):
         )
         if not ok or total <= 0:
             return
-        # Güncel fiyat çekimi sürebilir; bekleme imleci göster
-        QApplication.setOverrideCursor(QCursor(Qt.WaitCursor))
-        try:
-            portfolio_id = self.portfolio_vm.selected_portfolio_id if self.portfolio_vm else 1
-            self.view_model.import_percentage(path, total, portfolio_id or 1)
-        finally:
-            QApplication.restoreOverrideCursor()
+        portfolio_id = self.portfolio_vm.selected_portfolio_id if self.portfolio_vm else 1
+        self.view_model.import_percentage(path, total, portfolio_id or 1)
 
     def on_cashflow_clicked(self):
         path, _ = QFileDialog.getSaveFileName(

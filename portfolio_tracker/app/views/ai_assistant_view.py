@@ -32,7 +32,6 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from app.services.ml import anomaly as anomaly_mod
 from app.utils.formatters import format_currency
 
 _SEVERITY_COLORS = {"high": "#B91C1C", "medium": "#D97706", "info": "#00B5E2"}
@@ -399,11 +398,10 @@ class AIAssistantView(QWidget):
                     html.append(f"<li>{r}</li>")
                 html.append("</ul>")
 
-        anomalies = data.get("anomalies", [])
         html.append("<h4>Olağandışı Hareketler</h4>")
         html.append(
             "<p>"
-            + anomaly_mod.describe_anomalies(anomalies).replace("\n", "<br>")
+            + data.get("anomaly_description", "").replace("\n", "<br>")
             + "</p>"
         )
         self.tech_display.setHtml("".join(html))

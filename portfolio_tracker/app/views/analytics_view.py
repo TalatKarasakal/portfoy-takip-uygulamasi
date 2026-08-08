@@ -3,7 +3,7 @@ import time
 
 import pyqtgraph as pg
 from PySide6.QtCharts import QChart, QChartView, QPieSeries
-from PySide6.QtCore import Qt, QThread, Signal
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QPainter
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -21,7 +21,6 @@ from PySide6.QtWidgets import (
 )
 
 from app.config import COLORS
-from app.services.benchmark_service import BenchmarkService
 
 PIE_PALETTE = ["#00B5E2", "#10B981", "#F59E0B", "#8B5CF6", "#EC4899", "#6B7280",
                "#EF4444", "#14B8A6", "#A855F7", "#F97316"]
@@ -37,23 +36,6 @@ SERIES_COLORS = {
 RANGE_DAYS = {"1H": 7, "1A": 30, "3A": 90, "6A": 180, "1Y": 365}
 
 
-class BenchmarkLoader(QThread):
-    loaded = Signal(dict)
-
-    def __init__(self, start, end):
-        super().__init__()
-        # Not: 'start' adını kullanma — QThread.start() metodunu gölgeler.
-        self._start = start
-        self._end = end
-
-    def run(self):
-        try:
-            series = BenchmarkService.fetch_series(self._start, self._end)
-        except Exception:
-            series = {}
-        self.loaded.emit(series)
-
-
 class AnalyticsView(QWidget):
     def __init__(self, analytics_vm, portfolio_vm):
         super().__init__()
@@ -62,8 +44,8 @@ class AnalyticsView(QWidget):
         self._theme = "dark"
         self._range = "Tümü"
         self._history = []
+        self._monthly_returns = {}
         self._benchmark = {}
-        self._bench_loader = None
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 20, 20, 20)
@@ -76,6 +58,7 @@ class AnalyticsView(QWidget):
         layout.addWidget(self.tabs)
 
         self.analytics_vm.analytics_loaded.connect(self.on_analytics_loaded)
+        self.analytics_vm.benchmark_loaded.connect(self._on_benchmark_loaded)
         self.apply_chart_theme(self._theme)
 
     # ---------- Tab kurulumları ----------
@@ -266,18 +249,16 @@ class AnalyticsView(QWidget):
 
         # Geçmiş & yeniden çizim
         self._history = data.get("history", [])
+        self._monthly_returns = data.get("monthly_returns", {})
         self._render_performance()
         self._render_calendar(self._history)
 
         # Benchmark verisini bir kez (portföy aralığı, en az 1 yıl) arka planda çek;
         # sonra bellekte tutulan veriyle yeniden çiz (her yenilemede yeni thread açma).
-        loader_busy = self._bench_loader is not None and self._bench_loader.isRunning()
-        if len(self._history) >= 2 and not self._benchmark and not loader_busy:
+        if len(self._history) >= 2 and not self._benchmark:
             start = min(self._history[0]["date"], datetime.date.today() - datetime.timedelta(days=365))
             end = datetime.date.today()
-            self._bench_loader = BenchmarkLoader(start, end)
-            self._bench_loader.loaded.connect(self._on_benchmark_loaded)
-            self._bench_loader.start()
+            self.analytics_vm.load_benchmark(start, end)
         else:
             self._render_benchmark()
 
@@ -309,8 +290,7 @@ class AnalyticsView(QWidget):
             self.calendar_table.setVisible(False)
             return
 
-        from app.services.portfolio_service import PortfolioService
-        returns = PortfolioService.monthly_returns(history)
+        returns = self._monthly_returns
 
         if not returns:
             self.calendar_empty.setVisible(True)
@@ -410,8 +390,3 @@ class AnalyticsView(QWidget):
             )
         else:
             self.benchmark_status.setText("")
-
-    def closeEvent(self, event):
-        if self._bench_loader is not None and self._bench_loader.isRunning():
-            self._bench_loader.wait(2000)
-        super().closeEvent(event)

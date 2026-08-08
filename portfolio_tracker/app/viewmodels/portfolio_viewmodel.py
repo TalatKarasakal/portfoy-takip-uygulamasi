@@ -1,5 +1,6 @@
 import datetime
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 
 from PySide6.QtCore import QObject, QThread, Signal, Slot
 from sqlalchemy.orm import joinedload
@@ -18,37 +19,35 @@ from app.services.tefas_service import TefasService
 from app.services.transaction_service import TransactionCommand, TransactionService
 from app.utils.display import display
 from app.utils.logger import app_logger
+from app.viewmodels.worker import FunctionWorker, stop_worker
+
+
+@dataclass(frozen=True)
+class PortfolioLoadRequest:
+    cost_method: str
+    force_refresh: bool
+    portfolio_id: int | None
 
 
 class PortfolioLoaderThread(QThread):
     data_loaded_signal = Signal(list, dict)
     error_signal = Signal(str)
 
-    def __init__(
-        self,
-        cost_method,
-        force_refresh,
-        bist_service,
-        tefas_service,
-        currency_service,
-        portfolio_id,
-    ):
+    def __init__(self, request: PortfolioLoadRequest):
         super().__init__()
-        self.cost_method = cost_method
-        self.force_refresh = force_refresh
-        self.bist_service = bist_service
-        self.tefas_service = tefas_service
-        self.currency_service = currency_service
-        self.portfolio_id = portfolio_id
+        self.request = request
 
     def run(self):
         try:
+            bist_service = BistService()
+            tefas_service = TefasService()
+            currency_service = CurrencyService()
             with get_session() as session:
                 asset_query = session.query(Asset).options(joinedload(Asset.transactions))
-                if self.portfolio_id is not None:
+                if self.request.portfolio_id is not None:
                     asset_query = (
                         asset_query.join(Transaction)
-                        .filter(Transaction.portfolio_id == self.portfolio_id)
+                        .filter(Transaction.portfolio_id == self.request.portfolio_id)
                         .distinct()
                     )
                 else:
@@ -70,9 +69,9 @@ class PortfolioLoaderThread(QThread):
                     asset_id, code, asset_type = asset_data
                     try:
                         if asset_type == AssetType.BIST.name:
-                            q = self.bist_service.fetch_quote(code, self.force_refresh)
+                            q = bist_service.fetch_quote(code, self.request.force_refresh)
                         else:
-                            q = self.tefas_service.fetch_quote(code, self.force_refresh)
+                            q = tefas_service.fetch_quote(code, self.request.force_refresh)
                         return asset_id, q
                     except Exception as ex:
                         app_logger.error(f"Error fetching quote for {code}: {ex}")
@@ -90,7 +89,7 @@ class PortfolioLoaderThread(QThread):
                     if asset.asset_type == AssetType.TEFAS:
                         # Fon adı henüz çözülmemişse (ad == kod) TEFAS'tan tam adı çek
                         if not asset.name or asset.name == asset.code:
-                            fund_name = self.tefas_service.fetch_fund_name(asset.code)
+                            fund_name = tefas_service.fetch_fund_name(asset.code)
                             if fund_name:
                                 asset.name = fund_name
                                 session.commit()
@@ -115,11 +114,12 @@ class PortfolioLoaderThread(QThread):
                     txs = [
                         tx
                         for tx in asset.transactions
-                        if self.portfolio_id is None or tx.portfolio_id == self.portfolio_id
+                        if self.request.portfolio_id is None
+                        or tx.portfolio_id == self.request.portfolio_id
                     ]
                     try:
                         stats = PortfolioService.calculate_cost_and_pnl(
-                            txs, current_price, method=self.cost_method
+                            txs, current_price, method=self.request.cost_method
                         )
                     except PortfolioCalculationError as exc:
                         invalid_codes.append(f"{asset.code}: {exc}")
@@ -171,7 +171,7 @@ class PortfolioLoaderThread(QThread):
 
                 securities_value_try = total_value_try
                 cash_balance = float(
-                    PortfolioAccountService.cash_balance(session, self.portfolio_id)
+                    PortfolioAccountService.cash_balance(session, self.request.portfolio_id)
                 )
                 total_value_try = securities_value_try + cash_balance
 
@@ -188,7 +188,7 @@ class PortfolioLoaderThread(QThread):
                 )
 
                 # USD karşılığı (TCMB kuru). Kur alınamazsa 0 kalır.
-                usd_try = self.currency_service.fetch_usd_try(self.force_refresh)
+                usd_try = currency_service.fetch_usd_try(self.request.force_refresh)
                 total_value_usd = (total_value_try / usd_try) if usd_try else 0.0
 
                 # En iyi / en kötü pozisyon (toplam K/Z yüzdesine göre)
@@ -199,26 +199,28 @@ class PortfolioLoaderThread(QThread):
                     worst = min(portfolio_items, key=lambda x: x["pnl_pct"])
 
                 # Günlük snapshot kaydı (gerçek zaman serisi grafikleri için)
-                if total_value_try > 0 and self.portfolio_id is not None:
+                if total_value_try > 0 and self.request.portfolio_id is not None:
                     SnapshotService.record_snapshot(
                         session,
                         total_value_try=total_value_try,
                         total_cost_try=total_cost_try,
                         unrealized_pnl_try=unrealized_pnl_total,
                         total_value_usd=total_value_usd,
-                        portfolio_id=self.portfolio_id,
+                        portfolio_id=self.request.portfolio_id,
                         cash_balance_try=cash_balance,
                         net_external_flow_try=float(
                             PortfolioAccountService.external_flow_for_date(
-                                session, self.portfolio_id, datetime.date.today()
+                                session, self.request.portfolio_id, datetime.date.today()
                             )
                         ),
                     )
 
                 # Zaman serisi geçmişi (dashboard küçük grafik)
                 history = (
-                    SnapshotService.get_history(session, days=90, portfolio_id=self.portfolio_id)
-                    if self.portfolio_id is not None
+                    SnapshotService.get_history(
+                        session, days=90, portfolio_id=self.request.portfolio_id
+                    )
+                    if self.request.portfolio_id is not None
                     else SnapshotService.get_consolidated_history(session, days=90)
                 )
 
@@ -240,11 +242,12 @@ class PortfolioLoaderThread(QThread):
                     "invalid_codes": invalid_codes,
                     "history": history,
                     "portfolio_items": portfolio_items,
-                    "portfolio_id": self.portfolio_id,
+                    "portfolio_id": self.request.portfolio_id,
                     "cash_balance_try": cash_balance,
                     "securities_value_try": securities_value_try,
                 }
-                self.data_loaded_signal.emit(portfolio_items, kpi_data)
+                if not self.isInterruptionRequested():
+                    self.data_loaded_signal.emit(portfolio_items, kpi_data)
 
         except Exception as e:
             app_logger.error(f"Error in loader thread: {e}")
@@ -260,17 +263,17 @@ class PortfolioViewModel(QObject):
     kpi_updated = Signal(dict)
     portfolios_loaded = Signal(list)
     portfolio_selection_changed = Signal(object)
+    asset_history_loaded = Signal(str, list)
+    asset_history_failed = Signal(str, str)
 
     def __init__(self):
         super().__init__()
-        self.bist_service = BistService()
-        self.tefas_service = TefasService()
-        self.currency_service = CurrencyService()
         self.cached_portfolio_data = []
         self.cached_kpi_data = {}
         self.cost_method = self._load_cost_method()
         self._thread = None
         self._reload_pending = False
+        self._history_workers: dict[str, FunctionWorker] = {}
         self.selected_portfolio_id = 1
 
     def _load_cost_method(self) -> str:
@@ -300,12 +303,7 @@ class PortfolioViewModel(QObject):
         method = cost_method or self.cost_method
         self.loading_started.emit()
         self._thread = PortfolioLoaderThread(
-            method,
-            force_refresh,
-            self.bist_service,
-            self.tefas_service,
-            self.currency_service,
-            self.selected_portfolio_id,
+            PortfolioLoadRequest(method, force_refresh, self.selected_portfolio_id)
         )
         self._thread.data_loaded_signal.connect(self._on_data_loaded_success)
         self._thread.error_signal.connect(self._on_data_loaded_error)
@@ -506,3 +504,46 @@ class PortfolioViewModel(QObject):
         self.selected_portfolio_id = normalized
         self.portfolio_selection_changed.emit(normalized)
         self.load_data()
+
+    def load_asset_history(self, code: str, asset_type: str) -> None:
+        request = (code, asset_type)
+        tag = f"asset-history:{code}"
+        current = self._history_workers.get(tag)
+        if current is not None and current.isRunning():
+            return
+
+        def task():
+            records = []
+            if request[1] == "BIST":
+                raw = BistService().fetch_historical_prices(request[0], period="1y")
+                records = [
+                    {"date": row["date"], "price": row["close_price"]} for row in raw
+                ]
+            else:
+                end = datetime.datetime.now()
+                start = end - datetime.timedelta(days=365)
+                raw = TefasService().fetch_historical_prices(request[0], start, end)
+                records = [
+                    {"date": row.get("date"), "price": float(row["price"])}
+                    for row in raw
+                    if row.get("date") is not None and row.get("price") is not None
+                ]
+            records.sort(key=lambda row: row["date"])
+            return request[0], records
+
+        worker = FunctionWorker(tag, task)
+        worker.result_ready.connect(
+            lambda _tag, result: self.asset_history_loaded.emit(result[0], result[1])
+        )
+        worker.error_occurred.connect(
+            lambda _tag, message: self.asset_history_failed.emit(request[0], message)
+        )
+        worker.finished.connect(lambda: self._history_workers.pop(tag, None))
+        self._history_workers[tag] = worker
+        worker.start()
+
+    def shutdown(self) -> None:
+        stop_worker(self._thread)
+        for worker in list(self._history_workers.values()):
+            stop_worker(worker)
+        self._history_workers.clear()

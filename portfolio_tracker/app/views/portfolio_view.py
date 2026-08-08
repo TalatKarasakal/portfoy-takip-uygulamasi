@@ -356,9 +356,7 @@ class PortfolioView(QWidget):
 
     def open_chart(self, row):
         dialog = AssetChartDialog(
-            row["code"], row["type"],
-            self.view_model.bist_service, self.view_model.tefas_service,
-            self
+            row["code"], row["type"], self.view_model, self
         )
         dialog.exec()
 

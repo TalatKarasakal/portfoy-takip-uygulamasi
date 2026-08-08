@@ -131,3 +131,6 @@ class TransactionViewModel(QObject):
         except Exception as e:
             app_logger.error(f"Get available assets error: {e}")
             return []
+
+    def shutdown(self) -> None:
+        """Bu ViewModel arka plan işçisi tutmaz; ortak kapanış sözleşmesini uygular."""
