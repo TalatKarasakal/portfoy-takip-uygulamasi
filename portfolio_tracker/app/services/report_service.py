@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 import pandas as pd
-from PySide6.QtCore import QRectF, QUrl
+from PySide6.QtCore import QPointF, QRectF, QUrl
 from PySide6.QtGui import QColor, QImage, QPageSize, QPainter, QPdfWriter, QPen, QTextDocument
 from sqlalchemy.orm import Session
 
@@ -57,7 +57,7 @@ def _performance_chart(history: list[dict[str, Any]]) -> QImage:
             points.append((x, y))
         painter.setPen(QPen(QColor("#00B5E2"), 3))
         for previous, current in zip(points[:-1], points[1:]):
-            painter.drawLine(previous[0], previous[1], current[0], current[1])
+            painter.drawLine(QPointF(*previous), QPointF(*current))
     painter.end()
     return image
 

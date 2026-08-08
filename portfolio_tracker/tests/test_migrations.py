@@ -77,6 +77,40 @@ def test_unknown_schema_is_rejected(tmp_path):
     engine.dispose()
 
 
+def test_failed_migration_keeps_active_database_unchanged(tmp_path, monkeypatch):
+    database = tmp_path / "migration_failure.db"
+    engine = _engine(database)
+    command.upgrade(alembic_config(str(engine.url)), "0001_initial")
+    with engine.begin() as connection:
+        connection.exec_driver_sql(
+            "INSERT INTO settings (key, value) VALUES ('marker', 'active')"
+        )
+        connection.exec_driver_sql("DROP TABLE alembic_version")
+
+    def fail_upgrade(*_args, **_kwargs):
+        raise RuntimeError("forced migration failure")
+
+    monkeypatch.setattr(command, "upgrade", fail_upgrade)
+    with pytest.raises(MigrationError, match="forced migration failure"):
+        MigrationService.ensure_current(
+            engine,
+            approved=True,
+            backup_callback=lambda: BackupResult(True),
+        )
+
+    with sqlite3.connect(database) as connection:
+        marker = connection.execute(
+            "SELECT value FROM settings WHERE key='marker'"
+        ).fetchone()[0]
+        version_table = connection.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='alembic_version'"
+        ).fetchone()
+    assert marker == "active"
+    assert version_table is None
+    assert not database.with_suffix(".db.migration.tmp").exists()
+    engine.dispose()
+
+
 def test_legacy_migration_infers_opening_cash_and_adds_query_index(tmp_path):
     database = tmp_path / "legacy_with_data.db"
     engine = _engine(database)

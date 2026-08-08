@@ -300,27 +300,27 @@ class SettingsViewModel(QObject):
             stop_worker(worker)
         self._workers.clear()
 
+    @staticmethod
+    def _delete_all_data_task() -> str:
+        backup_result = BackupService.create_backup()
+        if not backup_result:
+            raise RuntimeError(
+                "Güvenlik yedeği alınamadığı için hiçbir veri silinmedi. "
+                + backup_result.error
+            )
+        with get_session() as session:
+            session.query(Alert).delete()
+            session.query(Transaction).delete()
+            session.query(PriceHistory).delete()
+            session.query(PortfolioSnapshot).delete()
+            session.query(Asset).delete()
+            session.commit()
+        return "Tüm veri silindi. (Silmeden önce otomatik yedek alındı.)"
+
     def delete_all_data(self):
         """Tüm portföy verisini siler. Güvenlik için önce otomatik yedek alınır."""
-        def task():
-            backup_result = BackupService.create_backup()
-            if not backup_result:
-                raise RuntimeError(
-                    "Güvenlik yedeği alınamadığı için hiçbir veri silinmedi. "
-                    + backup_result.error
-                )
-            with get_session() as session:
-                # Sıra önemli değil (cascade var) ama açıkça temizleyelim
-                session.query(Alert).delete()
-                session.query(Transaction).delete()
-                session.query(PriceHistory).delete()
-                session.query(PortfolioSnapshot).delete()
-                session.query(Asset).delete()
-                session.commit()
-            return "Tüm veri silindi. (Silmeden önce otomatik yedek alındı.)"
-
         def on_success(message):
             self.success_message.emit(message)
             self.data_wiped.emit()
 
-        self._run_task("Tüm veriyi silme", task, on_success)
+        self._run_task("Tüm veriyi silme", self._delete_all_data_task, on_success)

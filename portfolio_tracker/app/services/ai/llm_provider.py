@@ -2,8 +2,8 @@
 
 Yerel ve bulut sağlayıcıları desteklenir:
 
-* **Ollama** — Kullanıcının kendi makinesinde çalışan, tamamen ücretsiz ve
-  internet gerektirmeyen yerel modeller (llama3.1, qwen2.5, gemma2 vb.).
+* **Ollama** — Kullanıcının kendi makinesinde ve kendi model/lisans
+  koşullarıyla çalışan yerel modeller (llama3.1, qwen2.5, gemma2 vb.).
 * **Google Gemini** — Fiyat ve kota koşulları sağlayıcıya bağlı olan bulut
   modeli. API anahtarı işletim sisteminin güvenli kasasında tutulur.
 
@@ -76,7 +76,7 @@ class LLMProvider:
 
 
 class OllamaProvider(LLMProvider):
-    """Yerel Ollama sunucusuyla konuşan sağlayıcı (ücretsiz, çevrimdışı)."""
+    """Yerel Ollama sunucusuyla konuşan sağlayıcı."""
 
     name = "ollama"
 

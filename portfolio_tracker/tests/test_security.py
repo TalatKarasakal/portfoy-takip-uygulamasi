@@ -3,9 +3,13 @@ import sys
 
 import pytest
 
+from app.services.backup_service import BackupResult
 from app.services.secret_service import SecretService, SecretStoreError
 from app.utils.app_settings import DEFAULT_SETTINGS
 from app.utils.logger import SensitiveDataFilter, redact_sensitive
+from app.viewmodels import ai_viewmodel, settings_viewmodel
+from app.viewmodels.ai_viewmodel import AIViewModel
+from app.viewmodels.settings_viewmodel import SettingsViewModel
 
 
 class _Backend:
@@ -67,3 +71,37 @@ def test_log_redaction_covers_headers_urls_and_registered_secret():
     record = logging.LogRecord("test", logging.ERROR, __file__, 1, raw, (), None)
     assert SensitiveDataFilter().filter(record)
     assert "secret" not in record.getMessage().replace("[REDACTED]", "")
+
+
+def test_cloud_provider_is_blocked_without_versioned_consent(monkeypatch):
+    monkeypatch.setattr(
+        ai_viewmodel,
+        "load_settings_dict",
+        lambda: {"ai_provider": "gemini", "ai_cloud_consent_version": ""},
+    )
+    monkeypatch.setattr(
+        ai_viewmodel,
+        "get_provider",
+        lambda _settings: pytest.fail("Onaysız bulut sağlayıcısı çağrılmamalı"),
+    )
+    view_model = AIViewModel()
+
+    with pytest.raises(RuntimeError, match="bulut veri onayını"):
+        view_model._get_provider_or_raise()
+    assert view_model.cloud_upload_notice_required()
+
+
+def test_delete_all_data_stops_before_session_when_backup_fails(monkeypatch):
+    monkeypatch.setattr(
+        settings_viewmodel.BackupService,
+        "create_backup",
+        lambda: BackupResult(False, error="forced backup failure"),
+    )
+    monkeypatch.setattr(
+        settings_viewmodel,
+        "get_session",
+        lambda: pytest.fail("Yedek başarısızken veritabanı oturumu açılmamalı"),
+    )
+
+    with pytest.raises(RuntimeError, match="hiçbir veri silinmedi"):
+        SettingsViewModel._delete_all_data_task()

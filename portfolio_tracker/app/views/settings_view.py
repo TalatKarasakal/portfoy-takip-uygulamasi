@@ -86,7 +86,7 @@ class ImportPreviewDialog(QDialog):
         for index, row in enumerate(preview.rows):
             checkbox = QCheckBox()
             checkbox.setChecked(row.selected)
-            checkbox.setEnabled(row.status.value != "hatalı")
+            checkbox.setEnabled(row.status.value.casefold() != "hatalı")
             self._checks.append(checkbox)
             self.table.setCellWidget(index, 0, checkbox)
             self.table.setItem(index, 1, QTableWidgetItem(row.status.value))
@@ -204,10 +204,10 @@ class SettingsView(QWidget):
         form_ai.addRow("", self.btn_test_ai)
 
         ai_hint = QLabel(
-            "Ollama yerelde tamamen ücretsizdir (ollama.com). 'local' seçeneği "
+            "Ollama yerelde çalışır (ollama.com). 'local' seçeneği "
             "LM Studio, llama.cpp, Jan gibi OpenAI-uyumlu yerel sunucularla "
-            "çalışır. Gemini'nin fiyatı, kotası ve kullanım sınırları Google'ın "
-            "güncel sağlayıcı koşullarına bağlıdır."
+            "çalışır. Sağlayıcıların lisans, fiyat, kota ve kullanım sınırları "
+            "güncel koşullarına bağlıdır."
         )
         ai_hint.setWordWrap(True)
         ai_hint.setStyleSheet("color: #6B7280; font-size: 11px;")

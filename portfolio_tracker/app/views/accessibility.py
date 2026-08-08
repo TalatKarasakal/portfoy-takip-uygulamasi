@@ -27,7 +27,11 @@ def apply_accessibility(root: QWidget) -> None:
                 widget.setAccessibleName(name)
         if not widget.accessibleDescription() and widget.toolTip():
             widget.setAccessibleDescription(widget.toolTip())
-        if widget.focusPolicy() != Qt.NoFocus and widget.isEnabled():
+        if (
+            widget.window() is root.window()
+            and widget.focusPolicy() != Qt.NoFocus
+            and widget.isEnabled()
+        ):
             focusable.append(widget)
     for previous, current in zip(focusable[:-1], focusable[1:]):
         QWidget.setTabOrder(previous, current)

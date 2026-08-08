@@ -3,8 +3,12 @@ import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+# Test/smoke kontrolleri kullanıcı verisine dokunmadan ayrı bir veri kökü
+# seçebilir. Üretimde değişken verilmez ve platform varsayılanı kullanılır.
+_data_root_override = os.environ.get("PORTFOLIO_TRACKER_DATA_DIR")
+
 # Projenin kök dizini
-if getattr(sys, 'frozen', False):
+if getattr(sys, "frozen", False):
     # If the application is run as a bundle, the PyInstaller bootloader
     # extends the sys module by a flag frozen=True and sets the app
     # path into variable _MEIPASS'.
@@ -15,6 +19,9 @@ if getattr(sys, 'frozen', False):
 else:
     ROOT_DIR = Path(__file__).resolve().parent.parent
     DATA_ROOT = ROOT_DIR
+
+if _data_root_override:
+    DATA_ROOT = Path(_data_root_override).expanduser().resolve()
 
 DATA_DIR = DATA_ROOT / "data"
 BACKUP_DIR = DATA_DIR / "backups"

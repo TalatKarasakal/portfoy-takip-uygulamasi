@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional
@@ -43,7 +44,9 @@ class MigrationPlan:
 
 
 def alembic_config(database_url: str = DATABASE_URL) -> Config:
-    config = Config(str(Path(ROOT_DIR) / "alembic.ini"))
+    # Programatik yapılandırma wheel/PyInstaller kurulumunda proje kökünde
+    # ayrı bir alembic.ini dosyasına bağımlılığı ortadan kaldırır.
+    config = Config()
     config.set_main_option("script_location", str(Path(ROOT_DIR) / "app/database/migrations"))
     config.set_main_option("sqlalchemy.url", database_url.replace("%", "%%"))
     return config
@@ -90,12 +93,41 @@ class MigrationService:
                 raise MigrationError("Migration öncesi güvenlik yedeği alınamadı: " + backup.error)
 
         config = alembic_config(str(engine.url))
+        database_name = engine.url.database
+        staging_path: Path | None = None
         try:
-            engine.dispose()
-            if plan.is_legacy:
-                command.stamp(config, LEGACY_BASELINE_REVISION)
-            command.upgrade(config, "head")
+            # Var olan veritabanı doğrudan değiştirilmez. SQLite Backup API ile
+            # alınan çalışma kopyası yükseltilip doğrulandıktan sonra atomik
+            # olarak aktif dosyanın yerine geçirilir.
+            if not plan.is_new_database and database_name not in (None, "", ":memory:"):
+                database_path = Path(database_name).resolve()
+                staging_path = database_path.with_suffix(database_path.suffix + ".migration.tmp")
+                if staging_path.exists():
+                    staging_path.unlink()
+                BackupService._copy_with_sqlite_backup(database_path, staging_path)
+                staging_config = alembic_config(f"sqlite:///{staging_path}")
+                if plan.is_legacy:
+                    command.stamp(staging_config, LEGACY_BASELINE_REVISION)
+                command.upgrade(staging_config, "head")
+                preview = BackupService.validate_database(staging_path)
+                if not preview or preview.schema_revision != plan.target_revision:
+                    detail = preview.error if not preview else "Beklenen Alembic sürümü bulunamadı."
+                    raise MigrationError(f"Migration çalışma kopyası doğrulanamadı: {detail}")
+
+                engine.dispose()
+                os.replace(staging_path, database_path)
+                for suffix in ("-wal", "-shm"):
+                    sidecar = Path(str(database_path) + suffix)
+                    if sidecar.exists():
+                        sidecar.unlink()
+            else:
+                engine.dispose()
+                command.upgrade(config, "head")
         except Exception as exc:
+            if staging_path is not None and staging_path.exists():
+                staging_path.unlink()
+            if isinstance(exc, MigrationError):
+                raise
             raise MigrationError(f"Veritabanı migration başarısız: {exc}") from exc
         return plan
 

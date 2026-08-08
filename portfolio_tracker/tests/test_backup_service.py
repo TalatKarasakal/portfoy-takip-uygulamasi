@@ -51,6 +51,23 @@ def test_create_backup_is_valid_sqlite_snapshot(mock_env):
     assert _marker(result.path) == "active"
 
 
+def test_create_backup_succeeds_during_active_write_transaction(mock_env):
+    _create_portfolio_database(mock_env["db_file"])
+    writer = sqlite3.connect(mock_env["db_file"], timeout=5.0)
+    try:
+        writer.execute("BEGIN IMMEDIATE")
+        writer.execute("UPDATE settings SET value='uncommitted' WHERE key='marker'")
+
+        result = BackupService.create_backup()
+
+        assert result
+        assert _marker(result.path) == "active"
+        assert BackupService.validate_database(result.path).quick_check == "ok"
+    finally:
+        writer.rollback()
+        writer.close()
+
+
 def test_create_backup_rotates_only_regular_backups(mock_env):
     _create_portfolio_database(mock_env["db_file"])
     protected = mock_env["backup_dir"] / "backup_20260808_preimplementation.db"

@@ -1,4 +1,5 @@
 import datetime
+import math
 from decimal import Decimal
 
 import pytest
@@ -201,6 +202,18 @@ def test_xirr_reports_multiple_roots_as_ambiguous():
     assert result.status == XirrStatus.AMBIGUOUS
     assert result.rate is None
     assert len(result.roots) >= 2
+
+
+def test_xirr_extreme_root_never_reaches_ui_as_non_finite():
+    result = PortfolioService.calculate_xirr(
+        [
+            (datetime.date(2024, 1, 1), -1),
+            (datetime.date(2025, 1, 1), Decimal("1e100")),
+        ]
+    )
+    assert result.status == XirrStatus.UNAVAILABLE
+    assert result.rate is None
+    assert all(math.isfinite(root) for root in result.roots)
 
 
 def test_twr_is_neutral_to_external_deposit():

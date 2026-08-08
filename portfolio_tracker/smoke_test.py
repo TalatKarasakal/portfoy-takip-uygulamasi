@@ -121,10 +121,11 @@ def main():
     ])
     app.processEvents()
 
-    # Benchmark thread'inin tamamlanmasını bekle ve aralık butonlarını test et
+    # Benchmark worker'ının tamamlanmasını bekle ve aralık butonlarını test et
     av = win.views["analytics"]
-    if av._bench_loader is not None:
-        av._bench_loader.wait(3000)
+    benchmark_worker = win.analytics_vm._benchmark_worker
+    if benchmark_worker is not None:
+        benchmark_worker.wait(3000)
     app.processEvents()
     for rng in ("1H", "1A", "3A", "6A", "YBB", "1Y", "Tümü"):
         av._on_range_changed(rng)
@@ -149,7 +150,7 @@ def main():
         "asset_id": 1, "type": "SELL", "date_obj": datetime.date(2024, 1, 1),
         "quantity": 10, "unit_price": 5, "commission": 1, "tax": 0, "note": "n"})
     AddAlertDialog([{"id": 1, "code": "THYAO"}], win)
-    ExportColumnsDialog(win)
+    ExportColumnsDialog(["Varlık", "Miktar", "Değer"], win)
     app.processEvents()
 
     # USD görünüm modunu test et (çevirip yeniden render)
@@ -166,6 +167,8 @@ def main():
     app.processEvents()
     display.set_mode("TRY")
 
+    win.close()
+    app.processEvents()
     print("SMOKE_OK")
 
 

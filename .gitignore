@@ -3,11 +3,20 @@ __pycache__/
 *.py[cod]
 *$py.class
 venv/
+.venv/
 env/
 .env
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
 
 # Database & Personal Data (proje alt klasörde olduğu için ** ile eşleştir)
 **/data/*.db
+**/data/*.db-*
 **/data/backups/
 **/logs/*.log
 
@@ -15,11 +24,12 @@ env/
 dist/
 build/
 *.spec
+!portfolio_tracker/portfolio_tracker.spec
 
 # OS
 .DS_Store
 
-# Test virtualenv (Claude tarafından oluşturuldu)
+# Test sanal ortamı
 .venv-test/
 
 # macOS uygulama paketi (yerel)

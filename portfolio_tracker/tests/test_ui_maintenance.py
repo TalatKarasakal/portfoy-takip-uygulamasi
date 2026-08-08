@@ -1,17 +1,32 @@
 import os
 import sqlite3
+import time
 
 import pytest
-from PySide6.QtWidgets import QApplication, QLineEdit, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QApplication,
+    QDialogButtonBox,
+    QLineEdit,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 import app.models  # noqa: F401
 from app.database.base import Base
 from app.services.database_maintenance_service import DatabaseMaintenanceService
+from app.services.import_export_service import (
+    ImportPreview,
+    ImportPreviewRow,
+    ImportRowStatus,
+)
 from app.services.report_service import ReportMode, export_portfolio_pdf
 from app.utils.app_settings import AppSettings
+from app.viewmodels.worker import FunctionWorker, stop_worker
 from app.views.accessibility import apply_accessibility
+from app.views.settings_view import ImportPreviewDialog
 
 
 @pytest.fixture(scope="module")
@@ -93,3 +108,39 @@ def test_accessibility_assigns_names_and_typed_settings_validate(qt_app):
     assert settings.theme == "system"
     assert settings.default_currency == "TRY"
     assert settings.cost_method == "WAC"
+
+
+def test_import_preview_disables_error_rows_and_apply_action(qt_app):
+    preview = ImportPreview(
+        "sample.xlsx",
+        1,
+        [
+            ImportPreviewRow(
+                "İşlemler", 2, "transaction", ImportRowStatus.VALID, {"code": "THYAO"}
+            ),
+            ImportPreviewRow(
+                "İşlemler",
+                3,
+                "transaction",
+                ImportRowStatus.DUPLICATE,
+                {"code": "THYAO"},
+                selected=False,
+            ),
+            ImportPreviewRow(
+                "İşlemler", 4, "transaction", ImportRowStatus.ERROR, {}, "Geçersiz tarih"
+            ),
+        ],
+    )
+    dialog = ImportPreviewDialog(preview)
+
+    assert dialog._checks[0].isEnabled()
+    assert not dialog._checks[1].isChecked()
+    assert not dialog._checks[2].isEnabled()
+    assert not dialog.findChild(QDialogButtonBox).button(QDialogButtonBox.Ok).isEnabled()
+
+
+def test_worker_shutdown_waits_for_running_task(qt_app):
+    worker = FunctionWorker("short-task", lambda: time.sleep(0.02))
+    worker.start()
+    stop_worker(worker, timeout_ms=1000)
+    assert not worker.isRunning()

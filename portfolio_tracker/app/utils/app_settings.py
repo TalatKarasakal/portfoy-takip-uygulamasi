@@ -37,7 +37,7 @@ DEFAULT_SETTINGS: Dict[str, str] = {
     # Yapay zeka ayarları
     # ai_provider: "none" | "ollama" | "local" | "gemini"
     "ai_provider": "none",
-    # Ollama (yerel, tamamen ücretsiz) ayarları
+    # Ollama yerel sağlayıcı ayarları
     "ai_ollama_url": "http://localhost:11434",
     "ai_ollama_model": "llama3.1",
     # OpenAI-uyumlu yerel sunucu (LM Studio, llama.cpp, Jan, vLLM vb.) ayarları

@@ -1,15 +1,15 @@
 [build-system]
-requires = ["setuptools>=61.0.0"]
+requires = ["setuptools>=69.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "portfolio-tracker"
 version = "1.0.0"
-description = "Kişisel BIST hisse senedi ve TEFAS fonu portföy takip uygulaması"
-readme = "README.md"
+description = "Kişisel BIST ve TEFAS portföy takip uygulaması"
+readme = { text = "Yerel SQLite veritabanıyla çalışan PySide6 portföy takip ve analiz uygulaması.", content-type = "text/markdown" }
 requires-python = ">=3.11"
 authors = [
-    { name = "Talat Karasakal" }
+    { name = "Talat Karasakal" },
 ]
 classifiers = [
     "Programming Language :: Python :: 3.11",
@@ -25,29 +25,44 @@ dependencies = [
     "httpx>=0.24.1",
     "tefas-crawler>=0.2.1",
     "yfinance>=0.2.28",
-    "requests>=2.31.0",
     "openpyxl>=3.1.2",
     "pandas>=2.0.3",
     "numpy>=1.24.0",
     "plyer>=2.1.0",
+    "keyring>=25.0.0",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=7.4.0",
-    "pytest-qt>=4.2.0",
-    "black>=23.7.0",
-    "ruff>=0.0.280",
-    "pyinstaller>=5.13.0",
-    "mypy>=1.5.0",
+    "build>=1.2.1",
+    "mypy>=1.10.0",
+    "pyinstaller>=6.8.0",
+    "pytest>=8.2.0",
+    "pytest-qt>=4.4.0",
+    "ruff>=0.5.0",
 ]
 
 [project.scripts]
 portfolio-tracker = "main:main"
 
 [tool.setuptools]
-packages = ["app"]
-py-modules = ["main"]
+include-package-data = true
+py-modules = ["main", "mac_identity"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]
+namespaces = true
+
+[tool.setuptools.package-data]
+app = [
+    "database/migrations/*.py",
+    "database/migrations/*.mako",
+    "database/migrations/versions/*.py",
+    "resources/*.png",
+    "resources/fonts/*.ttf",
+    "resources/styles/*.qss",
+]
 
 [tool.ruff]
 target-version = "py311"
@@ -58,7 +73,16 @@ select = ["E", "F", "W", "I"]
 ignore = ["E701", "E402", "E712", "E501", "E722", "W291", "F841"]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.12"
 ignore_missing_imports = true
 warn_unused_configs = true
-disable_error_code = ["attr-defined", "return-value", "var-annotated", "assignment", "arg-type", "method-assign", "dict-item"]
+exclude = ["app/database/migrations/"]
+disable_error_code = [
+    "arg-type",
+    "assignment",
+    "attr-defined",
+    "dict-item",
+    "method-assign",
+    "return-value",
+    "var-annotated",
+]

@@ -1,96 +1,96 @@
 # Portföy Takip Uygulaması
 
-Kişisel BIST hisse senetleri ve TEFAS yatırım fonları portföylerini izlemek, analiz etmek ve işlem geçmişiyle birlikte değerlendirmek için geliştirilen yerel masaüstü uygulamasıdır. Uygulama sunucu bileşeni olmadan çalışır; portföy verileri kullanıcının makinesindeki SQLite veritabanında tutulur.
+BIST hisselerini ve TEFAS fonlarını birden fazla portföyde izleyen, nakit hareketlerini ve işlem geçmişini yerel SQLite veritabanında tutan PySide6 masaüstü uygulamasıdır. Sunucu bileşeni yoktur; kullanıcı verileri varsayılan olarak cihazdan çıkmaz.
 
-## Öne Çıkan Analitik Özellikler
+## Özellikler
 
-- XIRR, Sharpe oranı, maksimum düşüş (Max Drawdown) ve volatilite gibi performans metrikleri.
-- WAC, FIFO ve LIFO maliyet bazı yöntemleriyle gerçekleşmiş ve gerçekleşmemiş kar/zarar takibi.
-- PyQtGraph tabanlı tarihsel fiyat, portföy değeri ve karşılaştırmalı performans grafikleri.
-- BIST hisse senetleri ve TEFAS fonları için güncel fiyat ve geçmiş veri takibi.
-- Yerel işlem geçmişi üzerinden portföy dağılımı, maliyet, getiri ve risk analizi.
+- Ana portföy, ayrı portföyler ve salt-okunur konsolide görünüm
+- Alım, satım, temettü, split, masraf, para yatırma ve çekme kayıtları
+- WAC, FIFO ve LIFO maliyetleri; açık lotlar ve satış eşleşmeleri
+- Gerçekleşmiş/gerçekleşmemiş kâr-zarar, TWR ve XIRR analizi
+- BIST, TEFAS, döviz ve benchmark fiyatları için kaynak/tazelik bilgisi
+- Temettü planı, izleme listesi ve fiyat uyarıları
+- Önizlemeli ve geri alınabilir Excel içe aktarma
+- Özet veya tam denetim PDF raporu
+- Doğrulanmış atomik yedekleme, geri yükleme önizlemesi ve bakım araçları
+- Açık/koyu tema, klavye kısayolları ve erişilebilir kontrol açıklamaları
 
-## Teknoloji Yığını
+## Gereksinimler ve kurulum
 
-- Python 3.11+
-- PySide6 (Qt6)
-- SQLAlchemy 2.x
-- SQLite
-- PyQtGraph
-- httpx
-
-PySide6, LGPL lisansı altında dağıtılır. Uygulamanın dağıtımında bu lisansın yeniden bağlantı ve bildirim koşulları dikkate alınmalıdır.
-
-## Veri Kaynakları
-
-- `tefas-crawler`: TEFAS yatırım fonu verileri
-- `yfinance`: BIST hisse senedi verileri (`.IS` uzantılı semboller)
-- TCMB XML: Günlük USD/TRY kuru
-
-## Mimari
-
-Uygulama MVVM mimarisiyle yapılandırılmıştır. View katmanı PySide6 arayüz bileşenlerinden, ViewModel katmanı UI durumu ve bağlama mantığından, Model katmanı ise SQLAlchemy ORM varlıklarından sorumludur.
-
-## Kurulum
+Python 3.12 önerilir; desteklenen en düşük sürüm Python 3.11'dir.
 
 ```bash
 cd portfolio_tracker
-python -m venv .venv
+python3.12 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+python -m pip install --upgrade pip
+python -m pip install -e ".[dev]"
 ```
 
-Windows PowerShell için sanal ortam aktivasyonu:
+Windows PowerShell aktivasyonu:
 
 ```powershell
 cd portfolio_tracker
-python -m venv .venv
+py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
+python -m pip install --upgrade pip
+python -m pip install -e ".[dev]"
 ```
+
+`pyproject.toml` çalışma ve geliştirme bağımlılıklarının tek kaynağıdır.
 
 ## Çalıştırma
 
-Uygulamanın kaynak koddaki giriş noktası `portfolio_tracker/main.py` dosyasıdır.
-
 ```bash
 cd portfolio_tracker
+portfolio-tracker
+```
+
+Kaynak giriş noktası doğrudan da çalıştırılabilir:
+
+```bash
 python main.py
 ```
 
+İlk şema yükseltmesinde uygulama değişiklikleri önizletir ve kullanıcı onayı ister. Onaydan sonra migration başlamadan doğrulanmış bir güvenlik yedeği oluşturulur. Gerçek veritabanı `portfolio_tracker/data/portfolio.db`, yedekler `portfolio_tracker/data/backups/` altında tutulur. Paketlenmiş uygulama kullanıcı verilerini ev dizinindeki `.portfolio_tracker/` klasörüne yazar.
+
+## Veri kaynakları
+
+- `yfinance`: BIST hisseleri
+- `tefas-crawler`: TEFAS fonları
+- TCMB: döviz kurları
+
+Manuel yenileme önbelleği atlar. Otomatik yenileme piyasa saatleri, asgari istek aralığı ve servis önbellekleriyle sınırlandırılır. Üçüncü taraf sağlayıcıların erişilebilirliği, fiyatlandırması ve kota koşulları ilgili sağlayıcının güncel kurallarına bağlıdır.
+
+## İsteğe bağlı asistan
+
+Yerel Ollama veya Google Gemini sağlayıcısı kullanılabilir. Yerel analizler sağlayıcı seçilmeden çalışır. Gemini anahtarı işletim sisteminin güvenli anahtar kasasında saklanır; kasa kullanılamıyorsa bulut sağlayıcısı etkinleşmez. Buluta gönderilecek alanlar ilk kullanımda açıkça gösterilir ve sürümlü onay alınır. Görüntüden ve doğal dilden işlem çıkarma özellikleri deneysel olup kayıt öncesinde kullanıcı doğrulaması ister.
+
+## Geliştirme kontrolleri
+
+```bash
+cd portfolio_tracker
+ruff check app tests main.py mac_identity.py smoke_test.py
+mypy app main.py mac_identity.py
+QT_QPA_PLATFORM=offscreen pytest -W error
+QT_QPA_PLATFORM=offscreen python smoke_test.py
+python -m build --wheel
+portfolio-tracker --smoke-test
+```
+
+Testler geçici SQLite veritabanları kullanır. Geliştirme ve paketleme doğrulaması gerçek `data/portfolio.db` dosyasını değiştirmemelidir.
+
 ## Paketleme
 
-Dağıtım hedefleri macOS için `.dmg`, Windows için `.exe` artefaktlarıdır. Derleme ve paketleme çıktıları ile bunlara ait geçici yapılandırma dosyaları repoda tutulmaz.
+```bash
+cd portfolio_tracker
+pyinstaller --noconfirm portfolio_tracker.spec
+```
 
-## Yapay Zeka Özellikleri
+PyInstaller tanımı migration dosyalarını, QSS temalarını, fontları ve uygulama ikonunu pakete ekler. CI; Ruff, MyPy, uyarıları hata sayan testler, başsız GUI smoke testi, wheel giriş noktası ve macOS/Windows/Linux PyInstaller smoke kontrollerini çalıştırır.
 
-Uygulamada yerel veya bulut sağlayıcısıyla çalışan isteğe bağlı bir asistan
-bulunur. Asistan sol menüdeki **"Asistan"** sekmesinden kullanılır.
+## Mimari
 
-### Sağlayıcı seçenekleri
+Uygulama MVVM katmanlarına ayrılmıştır: View yalnızca ViewModel sinyalleri ve render verileriyle çalışır; SQLAlchemy modelleri ile servisler ViewModel katmanının arkasındadır. Uzun işlemler Session veya ORM nesnesi taşımayan worker'larda yürütülür. Ayrıntılı şema ve tasarım kararları [mimari dokümanında](docs/architecture_and_spec.md) bulunur.
 
-Ayarlar > **Yapay Zeka** bölümünden seçilir:
-
-- **Ollama** — Kendi makinenizde çalışan yerel modeller (llama3.1, qwen2.5,
-  gemma2 vb.). İnternet gerektirmez, tamamen ücretsiz ve gizlidir.
-  Kurulum: https://ollama.com (`ollama pull llama3.1`).
-- **Google Gemini** — Fiyatı, ücretsiz kotası ve kullanım sınırları Google'ın
-  güncel koşullarına bağlı olan bulut modeli. API anahtarı işletim sisteminin
-  güvenli kasasında tutulur; portföy verisi yalnız sürümlü kullanıcı onayından
-  sonra gönderilir: https://aistudio.google.com/app/apikey
-
-### Özellikler
-
-1. **Portföy Asistanı (sohbet)** — Portföyünüz hakkında doğal dilde soru sorun.
-2. **Otomatik Portföy Özeti** — Güncel durumun kısa Türkçe özeti.
-3. **Doğal Dil ile İşlem Girişi (Deneysel)** — Sonuç doğrulanmadan kaydedilmez.
-4. **Akıllı Risk Analizi** — Konsantrasyon ve çeşitlendirme uyarıları (LLM'siz, anında).
-5. **Teknik Analiz** — SMA, EMA, RSI, MACD ve trend sinyali (yerel hesaplama).
-6. **Anomali Tespiti** — Olağandışı fiyat hareketlerini yakalar (yerel hesaplama).
-7. **Haber Duygu Analizi** — Bir varlık hakkındaki güncel haberlerin duygu skoru.
-8. **Hedef Bazlı Öneri** — Risk + teknik göstergelere dayalı iyileştirme önerileri.
-9. **Görüntüden Aktarım (Deneysel)** — Bulut sağlayıcısında ayrıca dosya gönderim
-   onayı ister ve bulunan kayıtları kaydetmeden önce gösterir.
-
-> Teknik analiz, anomali tespiti ve risk analizi tamamen yerel ve LLM'siz
-> çalışır; sağlayıcı seçilmemiş olsa bile kullanılabilir.
+PySide6 LGPL lisansı altında dağıtılır. Paketleme sırasında lisans bildirimleri ile LGPL yeniden bağlantı koşulları gözetilmelidir.

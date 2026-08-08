@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import datetime
 from decimal import Decimal
-from typing import Optional
+from typing import Any, Optional
 
 from sqlalchemy.orm import Session, joinedload
 
@@ -136,7 +136,7 @@ class PortfolioAccountService:
             .order_by(Transaction.date, Transaction.id)
             .all()
         )
-        events = [
+        events: list[dict[str, Any]] = [
             {
                 "date": row.date,
                 "id": row.id,
