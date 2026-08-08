@@ -2,7 +2,8 @@ import os
 import sys
 
 import qtawesome as qta
-from PySide6.QtCore import QSize, Qt, QTimer
+from PySide6.QtCore import QSize, Qt, QTimer, Signal
+from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -18,10 +19,12 @@ from PySide6.QtWidgets import (
 
 
 class MainWindow(QMainWindow):
+    theme_changed = Signal(str, object)
+
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Portföy Takip ve Analiz")
-        self.setMinimumSize(1200, 800)
+        self.setMinimumSize(800, 600)
         self.current_theme = "dark"
 
         # Ana Layout (Yatay: Sol Sidebar, Sağ İçerik)
@@ -30,6 +33,13 @@ class MainWindow(QMainWindow):
         main_layout = QHBoxLayout(central_widget)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
+
+        self.sidebar_toggle = QPushButton("☰")
+        self.sidebar_toggle.setFixedWidth(38)
+        self.sidebar_toggle.setToolTip("Kenar çubuğunu aç/kapat (Ctrl+B)")
+        self.sidebar_toggle.setAccessibleName("Kenar çubuğunu aç veya kapat")
+        self.sidebar_toggle.clicked.connect(self.toggle_sidebar)
+        main_layout.addWidget(self.sidebar_toggle)
 
         # --- Sol Sidebar ---
         self.sidebar = QWidget()
@@ -166,6 +176,25 @@ class MainWindow(QMainWindow):
 
         for view_name, view_widget in self.views.items():
             self.stacked_widget.addWidget(view_widget)
+            if hasattr(view_widget, "apply_chart_theme"):
+                self.theme_changed.connect(view_widget.apply_chart_theme)
+
+        self._shortcuts = []
+        for index, nav_id in enumerate(self.views, start=1):
+            shortcut = QShortcut(QKeySequence(f"Ctrl+{index}"), self)
+            shortcut.activated.connect(lambda target=nav_id: self.switch_tab(target))
+            self._shortcuts.append(shortcut)
+        refresh_shortcut = QShortcut(QKeySequence("Ctrl+R"), self)
+        refresh_shortcut.activated.connect(
+            lambda: self.portfolio_vm.load_data(force_refresh=True)
+        )
+        sidebar_shortcut = QShortcut(QKeySequence("Ctrl+B"), self)
+        sidebar_shortcut.activated.connect(self.toggle_sidebar)
+        self._shortcuts.extend([refresh_shortcut, sidebar_shortcut])
+
+        from app.views.accessibility import apply_accessibility
+
+        apply_accessibility(self)
 
         # Portföy verisi yenilendikçe analiz, işlem listesi ve uyarıları tazele
         self.portfolio_vm.kpi_updated.connect(self._refresh_analytics)
@@ -229,10 +258,21 @@ class MainWindow(QMainWindow):
             with open(style_path, "r", encoding="utf-8") as f:
                 QApplication.instance().setStyleSheet(f.read())
 
-        # Grafik içeren view'lara tema rengini bildir
-        for view in getattr(self, "views", {}).values():
-            if hasattr(view, "apply_chart_theme"):
-                view.apply_chart_theme(theme)
+        from app.config import get_palette
+
+        self.theme_changed.emit(theme, get_palette(theme))
+
+    def toggle_sidebar(self):
+        self.sidebar.setVisible(not self.sidebar.isVisible())
+
+    def resizeEvent(self, event):
+        if (
+            hasattr(self, "sidebar")
+            and event.size().width() < 1000
+            and self.sidebar.isVisible()
+        ):
+            self.sidebar.hide()
+        super().resizeEvent(event)
 
     def on_settings_for_runtime(self, settings_dict):
         """Maliyet metodu, para birimi ve yenileme aralığı gibi çalışma-zamanı

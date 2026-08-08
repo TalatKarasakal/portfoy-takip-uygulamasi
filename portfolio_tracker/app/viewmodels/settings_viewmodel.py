@@ -9,10 +9,11 @@ from app.models.settings import Settings
 from app.models.transaction import Transaction
 from app.services.ai.llm_provider import get_provider
 from app.services.backup_service import BackupService
+from app.services.database_maintenance_service import DatabaseMaintenanceService
 from app.services.import_export_service import PORTFOLIO_EXPORT_COLUMNS, ImportExportService
-from app.services.report_service import export_cashflow_excel
+from app.services.report_service import ReportMode, export_cashflow_excel, export_portfolio_pdf
 from app.services.secret_service import SecretService, SecretStoreError
-from app.utils.app_settings import CLOUD_CONSENT_VERSION, DEFAULT_SETTINGS
+from app.utils.app_settings import CLOUD_CONSENT_VERSION, DEFAULT_SETTINGS, AppSettings
 from app.viewmodels.worker import FunctionWorker, stop_worker
 
 
@@ -28,6 +29,7 @@ class SettingsViewModel(QObject):
     provider_tested = Signal(dict)
     busy_changed = Signal(str, bool)
     task_progress = Signal(str, int)
+    maintenance_ready = Signal(object)
 
     # Hassas olmayan varsayılanlar app_settings'te; API anahtarları sistem kasasındadır.
     default_settings = DEFAULT_SETTINGS
@@ -65,6 +67,8 @@ class SettingsViewModel(QObject):
                 for s in db_settings:
                     if s.key != "ai_gemini_api_key":
                         settings_dict[s.key] = s.value
+                typed = AppSettings.from_mapping(settings_dict)
+                settings_dict.update(typed.to_dict())
                 settings_dict["ai_secret_store_available"] = (
                     "1" if SecretService.is_available() else "0"
                 )
@@ -93,6 +97,8 @@ class SettingsViewModel(QObject):
                 SecretService.delete_gemini_api_key()
             elif gemini_key:
                 SecretService.set_gemini_api_key(gemini_key)
+            validated = AppSettings.from_mapping({**self.default_settings, **payload}).to_dict()
+            payload = {key: validated.get(key, value) for key, value in payload.items()}
 
             with get_session() as session:
                 # Eski sürümlerde kalmış olabilecek düz metin sırrı da temizle.
@@ -208,6 +214,47 @@ class SettingsViewModel(QObject):
                 self.error_occurred.emit("Rapor için işlem kaydı bulunamadı.")
 
         self._run_task("Rapor", task, on_success)
+
+    def export_pdf_report(
+        self,
+        file_path: str,
+        mode: str,
+        portfolio_id: int | None,
+        kpi: dict,
+    ) -> None:
+        report_kpi = dict(kpi)
+
+        def task():
+            with get_session() as session:
+                return export_portfolio_pdf(
+                    session,
+                    file_path,
+                    ReportMode(mode),
+                    portfolio_id,
+                    report_kpi,
+                )
+
+        def on_success(result):
+            if result:
+                self.success_message.emit(f"PDF raporu oluşturuldu: {result.path}")
+            else:
+                self.error_occurred.emit(result.error)
+
+        self._run_task("PDF raporu", task, on_success)
+
+    def run_maintenance(self, action: str, argument: str = "") -> None:
+        actions = {
+            "integrity": DatabaseMaintenanceService.integrity_check,
+            "backups": DatabaseMaintenanceService.list_backups,
+            "restore_preview": lambda: DatabaseMaintenanceService.restore_preview(argument),
+            "portable_backup": lambda: DatabaseMaintenanceService.portable_backup(argument),
+            "optimize": DatabaseMaintenanceService.optimize,
+            "vacuum": DatabaseMaintenanceService.vacuum,
+        }
+        if action not in actions:
+            self.error_occurred.emit("Bilinmeyen bakım işlemi.")
+            return
+        self._run_task("Veritabanı bakımı", actions[action], self.maintenance_ready.emit)
 
     def create_backup(self):
         def on_success(result):

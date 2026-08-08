@@ -1,5 +1,6 @@
 import os
 import sys
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 # Projenin kök dizini
@@ -29,29 +30,35 @@ DATABASE_FILE = DATA_DIR / "portfolio.db"
 DATABASE_URL = f"sqlite:///{DATABASE_FILE}"
 
 # Tema Renkleri
-COLORS = {
-    "light": {
-        "primary": "#E30A17",
-        "secondary": "#00B5E2",
-        "background": "#F8F9FA",
-        "surface": "#FFFFFF",
-        "border": "#E5E7EB",
-        "text_primary": "#111827",
-        "text_secondary": "#6B7280",
-        "profit": "#10B981",
-        "loss": "#B91C1C",
-        "neutral": "#6B7280",
-    },
-    "dark": {
-        "primary": "#E30A17",
-        "secondary": "#00B5E2",
-        "background": "#0F1115",
-        "surface": "#1A1D23",
-        "border": "#2A2F38",
-        "text_primary": "#E5E7EB",
-        "text_secondary": "#9CA3AF",
-        "profit": "#10B981",
-        "loss": "#DC2626",
-        "neutral": "#9CA3AF",
-    }
+@dataclass(frozen=True)
+class ThemePalette:
+    primary: str
+    secondary: str
+    background: str
+    surface: str
+    border: str
+    text_primary: str
+    text_secondary: str
+    profit: str
+    loss: str
+    neutral: str
+
+
+PALETTES = {
+    "light": ThemePalette(
+        "#E30A17", "#00B5E2", "#F8F9FA", "#FFFFFF", "#E5E7EB",
+        "#111827", "#6B7280", "#10B981", "#B91C1C", "#6B7280",
+    ),
+    "dark": ThemePalette(
+        "#E30A17", "#00B5E2", "#0F1115", "#1A1D23", "#2A2F38",
+        "#E5E7EB", "#9CA3AF", "#10B981", "#DC2626", "#9CA3AF",
+    ),
 }
+
+
+def get_palette(theme: str) -> ThemePalette:
+    return PALETTES.get(theme, PALETTES["dark"])
+
+
+# Mevcut çizim kodları için salt-okunur sözlük görünümü.
+COLORS = {name: asdict(palette) for name, palette in PALETTES.items()}

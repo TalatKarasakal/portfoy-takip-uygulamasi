@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
 )
 
 from app.config import COLORS
+from app.views.widgets.chart_interaction import configure_pie_slice, install_crosshair
 
 PIE_PALETTE = ["#00B5E2", "#10B981", "#F59E0B", "#8B5CF6", "#EC4899", "#6B7280",
                "#EF4444", "#14B8A6", "#A855F7", "#F97316"]
@@ -127,6 +128,7 @@ class AnalyticsView(QWidget):
         self.plot_widget.setBackground("transparent")
         self.plot_widget.showGrid(x=True, y=True, alpha=0.3)
         self.plot_widget.addLegend()
+        install_crosshair(self.plot_widget)
         self.empty_perf_label = QLabel(
             "Bu aralıkta yeterli geçmiş veri yok. Uygulamayı kullandıkça portföy "
             "değer geçmişi otomatik birikecek."
@@ -230,6 +232,7 @@ class AnalyticsView(QWidget):
         self.benchmark_plot.setBackground("transparent")
         self.benchmark_plot.showGrid(x=True, y=True, alpha=0.3)
         self.benchmark_plot.addLegend()
+        install_crosshair(self.benchmark_plot)
         layout.addWidget(self.benchmark_plot)
         return widget
 
@@ -297,9 +300,13 @@ class AnalyticsView(QWidget):
         return widget
 
     # ---------- Tema ----------
-    def apply_chart_theme(self, theme: str):
+    def apply_chart_theme(self, theme: str, palette_object=None):
         self._theme = theme
-        palette = COLORS.get(theme, COLORS["dark"])
+        palette = (
+            palette_object.__dict__
+            if palette_object is not None
+            else COLORS.get(theme, COLORS["dark"])
+        )
         text_color = QColor(palette["text_primary"])
         from PySide6.QtGui import QBrush
         bg = QColor(palette["background"])
@@ -348,15 +355,19 @@ class AnalyticsView(QWidget):
         self.type_donut_series.clear()
         alloc_type = data.get("allocation_type", {})
         if alloc_type.get("BIST", 0) > 0:
-            self.type_donut_series.append("BIST", alloc_type["BIST"]).setColor(QColor("#00B5E2"))
+            slice_item = self.type_donut_series.append("BIST", alloc_type["BIST"])
+            slice_item.setColor(QColor("#00B5E2"))
+            configure_pie_slice(slice_item, "BIST", alloc_type["BIST"])
         if alloc_type.get("TEFAS", 0) > 0:
-            self.type_donut_series.append("TEFAS", alloc_type["TEFAS"]).setColor(QColor("#10B981"))
+            slice_item = self.type_donut_series.append("TEFAS", alloc_type["TEFAS"])
+            slice_item.setColor(QColor("#10B981"))
+            configure_pie_slice(slice_item, "TEFAS", alloc_type["TEFAS"])
 
         self.asset_donut_series.clear()
         for i, item in enumerate(data.get("allocation_asset", [])[:10]):
-            self.asset_donut_series.append(item["name"], item["value"]).setColor(
-                QColor(PIE_PALETTE[i % len(PIE_PALETTE)])
-            )
+            slice_item = self.asset_donut_series.append(item["name"], item["value"])
+            slice_item.setColor(QColor(PIE_PALETTE[i % len(PIE_PALETTE)]))
+            configure_pie_slice(slice_item, item["name"], item["value"])
 
         # Varlık K/Z katkısı + aylık getiri takvimi
         self._render_attribution(data.get("attribution", []))
@@ -574,6 +585,7 @@ class AnalyticsView(QWidget):
     # ---------- Çizim ----------
     def _render_performance(self):
         self.plot_widget.clear()
+        install_crosshair(self.plot_widget)
         start = self._window_start()
         hist = [h for h in self._history if start is None or h["date"] >= start]
 
@@ -596,6 +608,7 @@ class AnalyticsView(QWidget):
         if not hasattr(self, "benchmark_plot"):
             return
         self.benchmark_plot.clear()
+        install_crosshair(self.benchmark_plot)
         start = self._window_start()
 
         # Tüm serileri tek sözlükte topla (Portföy + benchmark'lar)

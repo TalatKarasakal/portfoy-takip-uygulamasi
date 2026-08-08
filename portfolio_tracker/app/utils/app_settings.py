@@ -7,7 +7,8 @@ için servisler genellikle sağlayıcıyı dışarıdan alır; bu modül yine de
 viewmodel'lerin ortak varsayılanları paylaşması için kullanılır).
 """
 
-from typing import Any, Dict
+from dataclasses import asdict, dataclass
+from typing import Dict
 
 from app.database.session import get_session
 from app.models.settings import Settings
@@ -49,6 +50,39 @@ DEFAULT_SETTINGS: Dict[str, str] = {
 }
 
 
+@dataclass(frozen=True)
+class AppSettings:
+    theme: str = "system"
+    default_currency: str = "TRY"
+    refresh_interval_minutes: str = "15"
+    cost_method: str = "WAC"
+    notifications_enabled: str = "1"
+    risk_profile: str = "balanced"
+    market_calendar_overrides: str = ""
+    ai_provider: str = "none"
+    ai_ollama_url: str = "http://localhost:11434"
+    ai_ollama_model: str = "llama3.1"
+    ai_local_url: str = "http://localhost:1234/v1"
+    ai_local_model: str = ""
+    ai_local_api_key: str = ""
+    ai_gemini_model: str = "gemini-2.0-flash"
+    ai_cloud_consent_version: str = ""
+
+    @classmethod
+    def from_mapping(cls, values: Dict[str, str]) -> "AppSettings":
+        known = {field: values.get(field, default) for field, default in asdict(cls()).items()}
+        if known["theme"] not in {"system", "light", "dark"}:
+            known["theme"] = "system"
+        if known["default_currency"] not in {"TRY", "USD"}:
+            known["default_currency"] = "TRY"
+        if known["cost_method"] not in {"WAC", "FIFO", "LIFO"}:
+            known["cost_method"] = "WAC"
+        return cls(**known)
+
+    def to_dict(self) -> Dict[str, str]:
+        return asdict(self)
+
+
 def load_settings_dict() -> Dict[str, str]:
     """Varsayılanlarla veritabanındaki ayarları birleştirip döndürür."""
     settings_dict = DEFAULT_SETTINGS.copy()
@@ -64,6 +98,5 @@ def load_settings_dict() -> Dict[str, str]:
     return settings_dict
 
 
-def get_setting(key: str, default: Any = None) -> Any:
-    """Tek bir ayar değerini döndürür."""
-    return load_settings_dict().get(key, default)
+def load_app_settings() -> AppSettings:
+    return AppSettings.from_mapping(load_settings_dict())

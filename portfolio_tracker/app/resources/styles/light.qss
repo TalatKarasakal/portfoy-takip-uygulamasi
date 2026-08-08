@@ -250,3 +250,7 @@ QScrollBar::handle:vertical {
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
     height: 0;
 }
+QPushButton:focus, QLineEdit:focus, QComboBox:focus, QTableView:focus,
+QCheckBox:focus, QTabBar::tab:focus {
+    border: 2px solid #007FA3;
+}

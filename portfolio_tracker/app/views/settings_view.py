@@ -143,6 +143,12 @@ class SettingsView(QWidget):
         self.refresh_combo.addItems(["15", "30", "60", "120", "240", "Manuel"])
         form_basic.addRow("Yenileme Sıklığı (dk):", self.refresh_combo)
 
+        self.market_overrides_edit = QLineEdit()
+        self.market_overrides_edit.setPlaceholderText(
+            '{"holidays":["2026-01-01"],"half_days":{"2026-12-31":"13:00"}}'
+        )
+        form_basic.addRow("Piyasa Takvimi İstisnaları:", self.market_overrides_edit)
+
         self.cost_method_combo = QComboBox()
         self.cost_method_combo.addItems(["WAC", "FIFO", "LIFO"])
         form_basic.addRow("Maliyet Metodu:", self.cost_method_combo)
@@ -235,6 +241,38 @@ class SettingsView(QWidget):
         self.btn_cashflow.clicked.connect(self.on_cashflow_clicked)
         data_v.addWidget(self.btn_cashflow)
 
+        self.btn_pdf_report = QPushButton("Portföy Raporu (PDF)")
+        self.btn_pdf_report.clicked.connect(self.on_pdf_report_clicked)
+        data_v.addWidget(self.btn_pdf_report)
+
+        maintenance_group = QGroupBox("Veritabanı Bakımı")
+        maintenance_layout = QHBoxLayout(maintenance_group)
+        self.btn_integrity = QPushButton("Bütünlük Kontrolü")
+        self.btn_list_backups = QPushButton("Yedekleri Doğrula")
+        self.btn_portable_backup = QPushButton("Taşınabilir Yedek")
+        self.btn_optimize = QPushButton("Optimize")
+        self.btn_vacuum = QPushButton("VACUUM")
+        self.btn_integrity.clicked.connect(
+            lambda: self.view_model.run_maintenance("integrity")
+        )
+        self.btn_list_backups.clicked.connect(
+            lambda: self.view_model.run_maintenance("backups")
+        )
+        self.btn_portable_backup.clicked.connect(self.on_portable_backup_clicked)
+        self.btn_optimize.clicked.connect(
+            lambda: self.view_model.run_maintenance("optimize")
+        )
+        self.btn_vacuum.clicked.connect(self.on_vacuum_clicked)
+        for button in (
+            self.btn_integrity,
+            self.btn_list_backups,
+            self.btn_portable_backup,
+            self.btn_optimize,
+            self.btn_vacuum,
+        ):
+            maintenance_layout.addWidget(button)
+        data_v.addWidget(maintenance_group)
+
         self.btn_delete_all = QPushButton("Tüm Veriyi Sil")
         self.btn_delete_all.setStyleSheet(
             "QPushButton { color: #DC2626; font-weight: bold; }"
@@ -267,6 +305,7 @@ class SettingsView(QWidget):
         self.view_model.percentage_import_needed.connect(self.on_percentage_import_needed)
         self.view_model.import_preview_ready.connect(self.on_import_preview_ready)
         self.view_model.provider_tested.connect(self.on_provider_tested)
+        self.view_model.maintenance_ready.connect(self.on_maintenance_ready)
         # Not: load_settings() MainWindow tarafından kurulum tamamlandıktan sonra
         # çağrılır; burada çağırmak view'lar/timer hazır olmadan sinyal tetikler.
 
@@ -274,6 +313,7 @@ class SettingsView(QWidget):
         self.theme_combo.setCurrentText(settings.get("theme", "system"))
         self.currency_combo.setCurrentText(settings.get("default_currency", "TRY"))
         self.refresh_combo.setCurrentText(settings.get("refresh_interval_minutes", "15"))
+        self.market_overrides_edit.setText(settings.get("market_calendar_overrides", ""))
         self.cost_method_combo.setCurrentText(settings.get("cost_method", "WAC"))
         self.notifications_check.setChecked(
             str(settings.get("notifications_enabled", "1")) in ("1", "True", "true")
@@ -325,18 +365,14 @@ class SettingsView(QWidget):
             "theme": self.theme_combo.currentText(),
             "default_currency": self.currency_combo.currentText(),
             "refresh_interval_minutes": self.refresh_combo.currentText(),
+            "market_calendar_overrides": self.market_overrides_edit.text().strip(),
             "cost_method": self.cost_method_combo.currentText(),
             "notifications_enabled": "1" if self.notifications_check.isChecked() else "0",
             "risk_profile": self.risk_profile_combo.currentData(),
-            "ai_provider": self.ai_provider_combo.currentText(),
-            "ai_ollama_url": self.ai_ollama_url_edit.text().strip() or "http://localhost:11434",
-            "ai_ollama_model": self.ai_ollama_model_edit.text().strip() or "llama3.1",
-            "ai_local_url": self.ai_local_url_edit.text().strip() or "http://localhost:1234/v1",
-            "ai_local_model": self.ai_local_model_edit.text().strip(),
             "ai_gemini_api_key": self.ai_gemini_key_edit.text().strip(),
-            "ai_gemini_model": self.ai_gemini_model_edit.text().strip() or "gemini-2.0-flash",
             "ai_cloud_consent_version": consent_version,
         }
+        new_s.update(self._current_ai_form_settings())
         self.view_model.save_settings(new_s)
 
     def _current_ai_form_settings(self) -> dict:
@@ -398,13 +434,8 @@ class SettingsView(QWidget):
     def on_restore_clicked(self):
         path, _ = QFileDialog.getOpenFileName(self, "Yedek Seç", "", "SQLite DB (*.db)")
         if path:
-            confirm = QMessageBox.question(
-                self, "Onay",
-                "Mevcut veri seçilen yedekle değiştirilecek. Devam edilsin mi?",
-                QMessageBox.Yes | QMessageBox.No, QMessageBox.No
-            )
-            if confirm == QMessageBox.Yes:
-                self.view_model.restore_backup(path)
+            self._pending_restore_path = path
+            self.view_model.run_maintenance("restore_preview", path)
 
     def on_export_clicked(self):
         col_dialog = ExportColumnsDialog(self.view_model.export_columns, self)
@@ -459,6 +490,70 @@ class SettingsView(QWidget):
         )
         if path:
             self.view_model.export_cashflow_report(path)
+
+    def on_pdf_report_clicked(self):
+        labels = ["Özet + grafik + performans", "Tam denetim raporu"]
+        selected, accepted = QInputDialog.getItem(
+            self, "PDF Rapor Türü", "Rapor içeriği:", labels, 0, False
+        )
+        if not accepted:
+            return
+        path, _ = QFileDialog.getSaveFileName(
+            self, "PDF Raporu", "portfoy_raporu.pdf", "PDF (*.pdf)"
+        )
+        if path:
+            mode = "audit" if selected == labels[1] else "summary"
+            portfolio_id = self.portfolio_vm.selected_portfolio_id if self.portfolio_vm else 1
+            kpi = self.portfolio_vm.cached_kpi_data if self.portfolio_vm else {}
+            self.view_model.export_pdf_report(path, mode, portfolio_id, kpi)
+
+    def on_portable_backup_clicked(self):
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Taşınabilir Yedek", "portfolio_portable.db", "SQLite DB (*.db)"
+        )
+        if path:
+            self.view_model.run_maintenance("portable_backup", path)
+
+    def on_vacuum_clicked(self):
+        answer = QMessageBox.question(
+            self,
+            "VACUUM Onayı",
+            "VACUUM geçici olarak veritabanını kilitler ve dosyayı yeniden yazar. "
+            "Doğrulanmış yedeğiniz varsa devam edin. İşlem başlatılsın mı?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if answer == QMessageBox.Yes:
+            self.view_model.run_maintenance("vacuum")
+
+    def on_maintenance_ready(self, result):
+        if result.action == "restore_preview" and result.success:
+            preview = result.details
+            answer = QMessageBox.question(
+                self,
+                "Geri Yükleme Önizlemesi",
+                f"Bütünlük: {preview.quick_check}\nŞema: {preview.schema_revision}\n"
+                f"Tablo sayısı: {len(preview.tables)}\n\nAktif veritabanı değiştirilsin mi?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+            if answer == QMessageBox.Yes:
+                self.view_model.restore_backup(self._pending_restore_path)
+            return
+        if result.action == "backups":
+            lines = [
+                f"{'✓' if row['valid'] else '✗'} {row['name']} — "
+                f"{row['size'] / 1024:.1f} KB — {row['revision'] or row['message']}"
+                for row in result.details
+            ]
+            QMessageBox.information(
+                self, "Yedek Doğrulama", "\n".join(lines) or "Yedek bulunamadı."
+            )
+            return
+        if result.success:
+            QMessageBox.information(self, "Veritabanı Bakımı", result.message)
+        else:
+            QMessageBox.warning(self, "Veritabanı Bakımı", result.message)
 
     def on_delete_all_clicked(self):
         confirm = QMessageBox.warning(

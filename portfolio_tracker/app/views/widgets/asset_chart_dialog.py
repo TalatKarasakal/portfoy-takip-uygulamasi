@@ -5,6 +5,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QDialog, QLabel, QVBoxLayout
 
 from app.config import COLORS
+from app.views.widgets.chart_interaction import install_crosshair
 
 
 class AssetChartDialog(QDialog):
@@ -39,6 +40,7 @@ class AssetChartDialog(QDialog):
             ax.setPen(pg.mkPen(color=self._palette["text_secondary"]))
             ax.setTextPen(pg.mkPen(color=self._palette["text_secondary"]))
         self.plot.showGrid(x=True, y=True, alpha=0.3)
+        install_crosshair(self.plot)
         self.plot.setVisible(False)
         layout.addWidget(self.plot)
 

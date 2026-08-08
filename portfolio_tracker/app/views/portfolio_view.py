@@ -1,3 +1,4 @@
+
 import qtawesome as qta
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt
 from PySide6.QtGui import QColor, QDoubleValidator
@@ -7,12 +8,15 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QHBoxLayout,
     QHeaderView,
+    QInputDialog,
     QLabel,
     QLineEdit,
     QMenu,
     QMessageBox,
     QPushButton,
     QTableView,
+    QTableWidget,
+    QTableWidgetItem,
     QVBoxLayout,
     QWidget,
 )
@@ -219,6 +223,14 @@ class PortfolioView(QWidget):
 
         toolbar.addStretch()
 
+        self.cash_btn = QPushButton("Nakit Defteri")
+        self.cash_btn.clicked.connect(self.open_cash_ledger)
+        toolbar.addWidget(self.cash_btn)
+
+        self.watchlist_btn = QPushButton("İzleme Listesi")
+        self.watchlist_btn.clicked.connect(self.open_watchlist)
+        toolbar.addWidget(self.watchlist_btn)
+
         self.refresh_btn = QPushButton(" Fiyatları Yenile")
         self.refresh_btn.setIcon(qta.icon("fa5s.sync"))
         self.refresh_btn.clicked.connect(lambda: self.view_model.load_data(force_refresh=True))
@@ -379,6 +391,15 @@ class PortfolioView(QWidget):
         )
         dialog.exec()
 
+    def open_cash_ledger(self):
+        if self.view_model.selected_portfolio_id is None:
+            QMessageBox.warning(self, "Nakit Defteri", "Belirli bir portföy seçin.")
+            return
+        CashLedgerDialog(self.view_model, self).exec()
+
+    def open_watchlist(self):
+        WatchlistDialog(self.view_model, self).exec()
+
     def open_transaction_dialog_for_row(self, row):
         assets = self.view_model.cached_portfolio_data
         dialog = AddTransactionDialog(assets, self)
@@ -391,3 +412,126 @@ class PortfolioView(QWidget):
                 self.view_model.add_transaction(**data)
             else:
                 QMessageBox.warning(self, "Hata", "Girdiğiniz veriler hatalı veya eksik.")
+
+
+class CashLedgerDialog(QDialog):
+    def __init__(self, view_model, parent=None):
+        super().__init__(parent)
+        self.view_model = view_model
+        self.setWindowTitle("Nakit Defteri")
+        self.resize(760, 480)
+        layout = QVBoxLayout(self)
+        actions = QHBoxLayout()
+        for label, entry_type in (
+            ("Para Yatır", "DEPOSIT"),
+            ("Para Çek", "WITHDRAWAL"),
+            ("Düzeltme", "ADJUSTMENT"),
+        ):
+            button = QPushButton(label)
+            button.clicked.connect(lambda _checked=False, kind=entry_type: self._add(kind))
+            actions.addWidget(button)
+        actions.addStretch()
+        layout.addLayout(actions)
+        self.table = QTableWidget(0, 6)
+        self.table.setHorizontalHeaderLabels(
+            ["Tarih", "Kaynak", "Tür", "Açıklama", "Tutar", "Bakiye"]
+        )
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        layout.addWidget(self.table)
+        self.refresh()
+
+    def refresh(self):
+        self.table.setRowCount(0)
+        for event in self.view_model.get_cash_ledger():
+            row = self.table.rowCount()
+            self.table.insertRow(row)
+            values = [
+                event["date"].isoformat(),
+                event["source"],
+                event["type"],
+                event["description"],
+                f"{event['amount']:,.2f}",
+                f"{event['balance']:,.2f}",
+            ]
+            for column, value in enumerate(values):
+                self.table.setItem(row, column, QTableWidgetItem(value))
+
+    def _add(self, entry_type):
+        minimum = -1_000_000_000 if entry_type == "ADJUSTMENT" else 0.01
+        amount, accepted = QInputDialog.getDouble(
+            self, "Nakit Hareketi", "Tutar:", 0, minimum, 1_000_000_000, 2
+        )
+        if not accepted:
+            return
+        note, accepted = QInputDialog.getText(self, "Nakit Hareketi", "Not:")
+        if accepted:
+            self.view_model.add_cash_entry(entry_type, amount, note)
+            self.refresh()
+
+
+class WatchlistDialog(QDialog):
+    def __init__(self, view_model, parent=None):
+        super().__init__(parent)
+        self.view_model = view_model
+        self.setWindowTitle("İzleme Listesi")
+        self.resize(720, 440)
+        layout = QVBoxLayout(self)
+        actions = QHBoxLayout()
+        add_button = QPushButton("Varlık Ekle")
+        remove_button = QPushButton("Seçili Kaydı Kaldır")
+        add_button.clicked.connect(self._add)
+        remove_button.clicked.connect(self._remove)
+        enabled = self.view_model.selected_portfolio_id is not None
+        add_button.setEnabled(enabled)
+        remove_button.setEnabled(enabled)
+        actions.addWidget(add_button)
+        actions.addWidget(remove_button)
+        actions.addStretch()
+        layout.addLayout(actions)
+        self.table = QTableWidget(0, 5)
+        self.table.setHorizontalHeaderLabels(["Kod", "Ad", "Tür", "Hedef", "Not"])
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        layout.addWidget(self.table)
+        self.refresh()
+
+    def refresh(self):
+        self._rows = self.view_model.get_watchlist()
+        self.table.setRowCount(0)
+        for item in self._rows:
+            row = self.table.rowCount()
+            self.table.insertRow(row)
+            values = [
+                item["code"], item["name"], item["type"],
+                "—" if item["target_price"] is None else str(item["target_price"]),
+                item["note"],
+            ]
+            for column, value in enumerate(values):
+                self.table.setItem(row, column, QTableWidgetItem(value))
+
+    def _add(self):
+        assets = self.view_model.get_asset_catalog()
+        if not assets:
+            QMessageBox.warning(self, "İzleme Listesi", "Varlık kataloğu boş.")
+            return
+        labels = [f"{asset['code']} — {asset['name']}" for asset in assets]
+        selected, accepted = QInputDialog.getItem(
+            self, "İzleme Listesi", "Varlık:", labels, 0, False
+        )
+        if not accepted:
+            return
+        asset = assets[labels.index(selected)]
+        target, target_ok = QInputDialog.getDouble(
+            self, "İzleme Listesi", "Hedef fiyat (0 = boş):", 0, 0, 1_000_000_000, 6
+        )
+        if not target_ok:
+            return
+        note, note_ok = QInputDialog.getText(self, "İzleme Listesi", "Not:")
+        if note_ok:
+            self.view_model.add_watchlist_item(asset["id"], target or None, note)
+            self.refresh()
+
+    def _remove(self):
+        row = self.table.currentRow()
+        if row >= 0:
+            self.view_model.remove_watchlist_item(self._rows[row]["id"])
+            self.refresh()

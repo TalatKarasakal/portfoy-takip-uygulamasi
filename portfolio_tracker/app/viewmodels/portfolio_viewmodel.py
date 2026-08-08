@@ -7,6 +7,7 @@ from sqlalchemy.orm import joinedload
 
 from app.database.session import get_session
 from app.models.asset import Asset, AssetType
+from app.models.portfolio import CashEntryType, WatchlistItem
 from app.models.settings import Settings
 from app.models.transaction import Transaction
 from app.services.bist_service import BistService
@@ -435,6 +436,76 @@ class PortfolioViewModel(QObject):
 
     def configure_refresh_policy(self, overrides_json: str) -> None:
         self.refresh_policy.configure(overrides_json)
+
+    def get_cash_ledger(self) -> list[dict]:
+        portfolio_id = self._require_concrete_portfolio()
+        with get_session() as session:
+            rows = PortfolioAccountService.cash_ledger(session, portfolio_id)
+        return [
+            {**row, "amount": float(row["amount"]), "balance": float(row["balance"])}
+            for row in rows
+        ]
+
+    def add_cash_entry(self, entry_type: str, amount: float, note: str = "") -> None:
+        try:
+            with get_session() as session:
+                with session.begin():
+                    PortfolioAccountService.add_cash_entry(
+                        session,
+                        self._require_concrete_portfolio(),
+                        CashEntryType[entry_type],
+                        datetime.date.today(),
+                        amount,
+                        note,
+                    )
+            self.load_data()
+        except Exception as exc:
+            self.error_occurred.emit(str(exc))
+
+    def get_watchlist(self) -> list[dict]:
+        with get_session() as session:
+            return PortfolioAccountService.list_watchlist(
+                session, self.selected_portfolio_id
+            )
+
+    def get_asset_catalog(self) -> list[dict]:
+        with get_session() as session:
+            return [
+                {"id": asset.id, "code": asset.code, "name": asset.name}
+                for asset in session.query(Asset).order_by(Asset.code).all()
+            ]
+
+    def add_watchlist_item(
+        self, asset_id: int, target_price: float | None, note: str = ""
+    ) -> None:
+        try:
+            with get_session() as session:
+                with session.begin():
+                    PortfolioAccountService.add_to_watchlist(
+                        session,
+                        self._require_concrete_portfolio(),
+                        asset_id,
+                        target_price,
+                        note,
+                    )
+        except Exception as exc:
+            self.error_occurred.emit(str(exc))
+
+    def remove_watchlist_item(self, item_id: int) -> None:
+        try:
+            with get_session() as session:
+                with session.begin():
+                    row = session.get(WatchlistItem, item_id)
+                    if row is None:
+                        raise ValueError("İzleme listesi kaydı bulunamadı.")
+                    if (
+                        self.selected_portfolio_id is not None
+                        and row.portfolio_id != self.selected_portfolio_id
+                    ):
+                        raise ValueError("Bu kayıt seçili portföye ait değil.")
+                    session.delete(row)
+        except Exception as exc:
+            self.error_occurred.emit(str(exc))
 
     @Slot(str)
     def _on_data_loaded_error(self, err):

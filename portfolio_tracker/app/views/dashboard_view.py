@@ -10,6 +10,7 @@ from app.config import COLORS
 from app.utils.display import display
 from app.utils.formatters import format_percent
 from app.views.transactions_view import TransactionTableModel
+from app.views.widgets.chart_interaction import configure_pie_slice, install_crosshair
 from app.views.widgets.kpi_card import KPICard
 
 # Donut grafiği dilim renk paleti (Türk kırmızısı vurgu rengi K/Z için kullanılmaz,
@@ -71,6 +72,7 @@ class DashboardView(QWidget):
         self.line_view.setBackground("transparent")
         self.line_view.showGrid(x=True, y=True, alpha=0.3)
         self.line_view.setProperty("class", "CardWidget")
+        install_crosshair(self.line_view)
 
         charts_layout.addWidget(self.donut_view, 1)
         charts_layout.addWidget(self.line_view, 2)
@@ -95,10 +97,14 @@ class DashboardView(QWidget):
 
         self.apply_chart_theme(self._theme)
 
-    def apply_chart_theme(self, theme: str):
+    def apply_chart_theme(self, theme: str, palette_object=None):
         """Tema değişiminde grafik metin/eksen renklerini günceller."""
         self._theme = theme
-        palette = COLORS.get(theme, COLORS["dark"])
+        palette = (
+            palette_object.__dict__
+            if palette_object is not None
+            else COLORS.get(theme, COLORS["dark"])
+        )
         text_color = QColor(palette["text_primary"])
         secondary = QColor(palette["text_secondary"])
 
@@ -167,6 +173,7 @@ class DashboardView(QWidget):
             if item["current_value"] > 0:
                 sl = self.donut_series.append(item["code"], item["current_value"])
                 sl.setColor(QColor(PIE_PALETTE[color_i % len(PIE_PALETTE)]))
+                configure_pie_slice(sl, item["code"], item["current_value"])
                 color_i += 1
 
         if other_assets:
@@ -174,9 +181,11 @@ class DashboardView(QWidget):
             if other_val > 0:
                 sl = self.donut_series.append("Diğer", other_val)
                 sl.setColor(QColor(PIE_PALETTE[-1]))
+                configure_pie_slice(sl, "Diğer", other_val)
 
         # Çizgi grafik: gerçek snapshot geçmişi
         self.line_view.clear()
+        install_crosshair(self.line_view)
         history = data.get("history", [])
         if len(history) >= 2:
             xs = [time.mktime(h["date"].timetuple()) for h in history]
