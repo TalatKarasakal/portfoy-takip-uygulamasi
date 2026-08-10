@@ -1,37 +1,50 @@
 # Portföy Takip Uygulaması
 
-Kişisel BIST hisse senetleri ve TEFAS yatırım fonları portföylerini izlemek, analiz etmek ve işlem geçmişiyle birlikte değerlendirmek için geliştirilen yerel masaüstü uygulamasıdır. Uygulama sunucu bileşeni olmadan çalışır; portföy verileri kullanıcının makinesindeki SQLite veritabanında tutulur.
+BIST hisse senetleri ve TEFAS yatırım fonları için yerel masaüstü portföy takip
+uygulaması.
 
-## Öne Çıkan Analitik Özellikler
+[Türkçe](#türkçe) · [English](#english)
 
-- XIRR, Sharpe oranı, maksimum düşüş (Max Drawdown) ve volatilite gibi performans metrikleri.
-- WAC, FIFO ve LIFO maliyet bazı yöntemleriyle gerçekleşmiş ve gerçekleşmemiş kar/zarar takibi.
-- PyQtGraph tabanlı tarihsel fiyat, portföy değeri ve karşılaştırmalı performans grafikleri.
-- BIST hisse senetleri ve TEFAS fonları için güncel fiyat ve geçmiş veri takibi.
-- Yerel işlem geçmişi üzerinden portföy dağılımı, maliyet, getiri ve risk analizi.
+---
 
-## Teknoloji Yığını
+## Türkçe
 
-- Python 3.11+
-- PySide6 (Qt6)
-- SQLAlchemy 2.x
-- SQLite
-- PyQtGraph
-- httpx
+Kişisel BIST hisse senetleri ve TEFAS yatırım fonları portföylerini izlemek,
+analiz etmek ve işlem geçmişiyle birlikte değerlendirmek için geliştirilen
+yerel masaüstü uygulamasıdır. Uygulama sunucu bileşeni olmadan çalışır;
+portföy verileri kullanıcının makinesindeki SQLite veritabanında tutulur.
 
-PySide6, LGPL lisansı altında dağıtılır. Uygulamanın dağıtımında bu lisansın yeniden bağlantı ve bildirim koşulları dikkate alınmalıdır.
+### Öne çıkan analitik özellikler
 
-## Veri Kaynakları
+- XIRR, Sharpe oranı, maksimum düşüş (Max Drawdown) ve volatilite gibi
+  performans metrikleri
+- WAC, FIFO ve LIFO maliyet bazı yöntemleriyle gerçekleşmiş ve gerçekleşmemiş
+  kar/zarar takibi
+- PyQtGraph tabanlı tarihsel fiyat, portföy değeri ve karşılaştırmalı
+  performans grafikleri
+- BIST hisse senetleri ve TEFAS fonları için güncel fiyat ve geçmiş veri takibi
+- Yerel işlem geçmişi üzerinden portföy dağılımı, maliyet, getiri ve risk analizi
 
-- `tefas-crawler`: TEFAS yatırım fonu verileri
-- `yfinance`: BIST hisse senedi verileri (`.IS` uzantılı semboller)
-- TCMB XML: Günlük USD/TRY kuru
+### Teknoloji yığını
 
-## Mimari
+Python 3.11+ · PySide6 (Qt6) · SQLAlchemy 2.x · SQLite · PyQtGraph · httpx
 
-Uygulama MVVM mimarisiyle yapılandırılmıştır. View katmanı PySide6 arayüz bileşenlerinden, ViewModel katmanı UI durumu ve bağlama mantığından, Model katmanı ise SQLAlchemy ORM varlıklarından sorumludur.
+PySide6, LGPL lisansı altında dağıtılır. Uygulamanın dağıtımında bu lisansın
+yeniden bağlantı ve bildirim koşulları dikkate alınmalıdır.
 
-## Kurulum
+### Veri kaynakları
+
+- `tefas-crawler` — TEFAS yatırım fonu verileri
+- `yfinance` — BIST hisse senedi verileri (`.IS` uzantılı semboller)
+- TCMB XML — günlük USD/TRY kuru
+
+### Mimari
+
+Uygulama MVVM mimarisiyle yapılandırılmıştır. View katmanı PySide6 arayüz
+bileşenlerinden, ViewModel katmanı UI durumu ve bağlama mantığından, Model
+katmanı ise SQLAlchemy ORM varlıklarından sorumludur.
+
+### Kurulum
 
 ```bash
 cd portfolio_tracker
@@ -40,7 +53,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Windows PowerShell için sanal ortam aktivasyonu:
+Windows PowerShell:
 
 ```powershell
 cd portfolio_tracker
@@ -49,44 +62,106 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-## Çalıştırma
-
-Uygulamanın kaynak koddaki giriş noktası `portfolio_tracker/main.py` dosyasıdır.
+### Çalıştırma
 
 ```bash
 cd portfolio_tracker
 python main.py
 ```
 
-## Paketleme
+### Paketleme
 
-Dağıtım hedefleri macOS için `.dmg`, Windows için `.exe` artefaktlarıdır. Derleme ve paketleme çıktıları ile bunlara ait geçici yapılandırma dosyaları repoda tutulmaz.
+Dağıtım hedefleri macOS için `.dmg`, Windows için `.exe` artefaktlarıdır.
+Derleme ve paketleme çıktıları ile bunlara ait geçici yapılandırma dosyaları
+repoda tutulmaz.
 
-## Yapay Zeka Özellikleri
+### Yapay zekâ özellikleri
 
-Uygulamaya, tamamen **ücretsiz** çalışan bir yapay zeka asistanı eklendi.
-Asistan sol menüdeki **"Asistan"** sekmesinden kullanılır.
+Uygulamaya, tamamen ücretsiz çalışan bir yapay zekâ asistanı eklendi.
+Asistan sol menüdeki **Asistan** sekmesinden kullanılır.
 
-### Sağlayıcı seçenekleri (her ikisi de ücretsiz)
+**Sağlayıcı seçenekleri** (Ayarlar → Yapay Zekâ):
 
-Ayarlar > **Yapay Zeka** bölümünden seçilir:
-
-- **Ollama** — Kendi makinenizde çalışan yerel modeller (llama3.1, qwen2.5,
-  gemma2 vb.). İnternet gerektirmez, tamamen ücretsiz ve gizlidir.
-  Kurulum: https://ollama.com (`ollama pull llama3.1`).
-- **Google Gemini** — Ücretsiz katmanı olan bulut modeli. Yalnızca bir API
+- **Ollama** — kendi makinenizde çalışan yerel modeller (llama3.1, qwen2.5,
+  gemma2 vb.). İnternet gerektirmez, veriler cihazdan çıkmaz.
+  Kurulum: https://ollama.com (`ollama pull llama3.1`)
+- **Google Gemini** — ücretsiz katmanı olan bulut modeli, yalnızca bir API
   anahtarı gerekir: https://aistudio.google.com/app/apikey
 
-### Özellikler
-
-1. **Portföy Asistanı (sohbet)** — Portföyünüz hakkında doğal dilde soru sorun.
-2. **Otomatik Portföy Özeti** — Güncel durumun kısa Türkçe özeti.
-3. **Doğal Dil ile İşlem Girişi** — "Dün 100 THYAO aldım 280 liradan" → işlem kaydı.
-4. **Akıllı Risk Analizi** — Konsantrasyon ve çeşitlendirme uyarıları (LLM'siz, anında).
-5. **Teknik Analiz** — SMA, EMA, RSI, MACD ve trend sinyali (yerel hesaplama).
-6. **Anomali Tespiti** — Olağandışı fiyat hareketlerini yakalar (yerel hesaplama).
-7. **Haber Duygu Analizi** — Bir varlık hakkındaki güncel haberlerin duygu skoru.
-8. **Hedef Bazlı Öneri** — Risk + teknik göstergelere dayalı iyileştirme önerileri.
+**Özellikler:** portföy hakkında doğal dilde soru sorma, otomatik portföy
+özeti, doğal dil ile işlem girişi ("Dün 100 THYAO aldım 280 liradan"),
+konsantrasyon ve çeşitlendirme uyarıları, teknik analiz (SMA, EMA, RSI, MACD),
+anomali tespiti, haber duygu analizi ve hedef bazlı öneriler.
 
 > Teknik analiz, anomali tespiti ve risk analizi tamamen yerel ve LLM'siz
 > çalışır; sağlayıcı seçilmemiş olsa bile kullanılabilir.
+
+---
+
+## English
+
+A local desktop application for tracking and analysing personal portfolios of
+Turkish equities (BIST) and mutual funds (TEFAS). It runs without any server
+component; portfolio data is stored in a SQLite database on the user's machine.
+
+### Analytics
+
+- Performance metrics: XIRR, Sharpe ratio, maximum drawdown and volatility
+- Realised and unrealised profit/loss with weighted-average, FIFO or LIFO cost
+  basis
+- Historical price, portfolio value and comparative performance charts built
+  with PyQtGraph
+- Current and historical data for BIST equities and TEFAS funds
+- Allocation, cost, return and risk analysis from the local transaction history
+
+### Stack
+
+Python 3.11+ · PySide6 (Qt6) · SQLAlchemy 2.x · SQLite · PyQtGraph · httpx
+
+PySide6 is distributed under the LGPL; its relinking and notice requirements
+apply to any distribution of this application.
+
+### Data sources
+
+- `tefas-crawler` — TEFAS mutual fund data
+- `yfinance` — BIST equity data (`.IS` suffixed symbols)
+- TCMB XML — daily USD/TRY exchange rate
+
+### Architecture
+
+The application follows an MVVM structure: the View layer holds the PySide6
+widgets, the ViewModel layer holds UI state and binding logic, and the Model
+layer is made of SQLAlchemy ORM entities.
+
+### Setup
+
+```bash
+cd portfolio_tracker
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python main.py
+```
+
+### Packaging
+
+Distribution targets are a `.dmg` for macOS and an `.exe` for Windows. Build
+and packaging artefacts, along with their temporary configuration files, are
+not tracked in the repository.
+
+### AI assistant
+
+The application includes an AI assistant that runs entirely on free
+providers, available from the **Asistan** tab.
+
+- **Ollama** — local models running on your own machine (llama3.1, qwen2.5,
+  gemma2 and others). No internet required; data never leaves the device.
+- **Google Gemini** — a cloud model with a free tier, requiring only an API key.
+
+It supports natural-language questions about the portfolio, automatic
+summaries, natural-language transaction entry, concentration and
+diversification warnings, technical analysis (SMA, EMA, RSI, MACD), anomaly
+detection, news sentiment analysis and goal-based suggestions.
+
+> Technical analysis, anomaly detection and risk analysis run locally without
+> an LLM and work even when no provider is configured.
