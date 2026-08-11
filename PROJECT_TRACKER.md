@@ -1,371 +1,96 @@
 # 📌 Portföy Takip ve Analiz Uygulaması — Proje Takip Belgesi
 
-Bu belge aktif işleri, doğrulanmış sorunları, çözüm önerilerini, kullanıcı kontrolü bekleyen değişiklikleri ve geliştirme fikirlerini takip eder.
+Bu belge aktif işleri, kullanıcı kontrolü bekleyen çözümleri ve reddedilen önerileri takip eder.
 
-- **Son güncelleme:** 2026-08-08
-- **Aktif sorun sayısı:** 20
-- **Kontrol bekleyen çözüm sayısı:** 0
+- **Son güncelleme:** 2026-08-11
+- **Aktif madde sayısı:** 0
+- **Kontrol bekleyen çözüm sayısı:** 40
+- **Son otomatik doğrulama:** 142 test, Ruff, MyPy, GUI smoke, wheel smoke ve macOS PyInstaller smoke
 
 ---
 
-## 🧭 0. Takip Standardı ve Sıradaki İşler
-
-### Sıradaki 3 İş
-
-1. **PT-007 — Yedek başarısız olsa bile verilerin silinmesi:** Geri dönüşü olmayan veri kaybı riski nedeniyle ilk sıradadır.
-2. **PT-005 — Excel round-trip veri bozulması:** Uygulamanın kendi çıktısının kayıpsız geri alınması sağlanmalıdır.
-3. **PT-006 — Geçersiz ve fazla satış işlemleri:** Bütün veri giriş kanalları ortak doğrulamaya bağlanmalıdır.
-
-### Kimlikler
+## 🧭 0. Takip Standardı
 
 - `TODO-*`: Küçük işler ve notlar
-- `PT-*`: Doğrulanacak veya çözülecek sorunlar
-- `FTR-*`: Yeni özellik önerileri
-- `SIM-*`: Sadeleştirme ve kaldırma önerileri
+- `PT-*`: Doğrulanmış sorunlar
+- `FTR-*`: Yeni özellikler
+- `SIM-*`: Sadeleştirme ve kaldırma işleri
+- Kimlikler yeniden numaralandırılmaz veya başka işler için tekrar kullanılmaz.
+- Kodlanan çözüm, kullanıcı doğrulamasına kadar **Kontrol Bekliyor** durumunda kalır.
+- Kullanıcı onayından sonra kayıt `PROJECT_HISTORY.md` dosyasına taşınır.
+- Reddedilen öneriler gerekçesiyle birlikte belgede tutulur ve tekrar önerilmez.
 
-Kimlikler yeniden numaralandırılmaz ve başka bir madde için tekrar kullanılmaz.
+### Önerilen manuel doğrulama sırası
 
-### Standart Durumlar
-
-- **Açık:** Çalışmasına başlanmamış aktif madde
-- **Devam Ediyor:** Üzerinde kodlama veya araştırma yapılan madde
-- **Engelli:** Dış karar, yetki veya bilgi bekleyen madde
-- **Kontrol Bekliyor:** Kodlaması tamamlanmış ve kullanıcı doğrulaması bekleyen madde
-
-### Öncelikler
-
-- **Kritik:** Veri kaybı, veri bozulması veya sır sızıntısı riski
-- **Yüksek:** Finansal doğruluğu ya da temel işlevi etkileyen sorun
-- **Orta:** Mimari, performans veya kullanıcı deneyimi sorunu
-- **Düşük:** Bakım, temizlik veya sınırlı etkili iyileştirme
-
-### Kayıt ve Arşivleme Kuralları
-
-- Yeni sorunlarda kimlik, durum, öncelik, kaynak, tarih, ilgili dosyalar ve kabul kriterleri bulunur.
-- Kodlanan çözüm, kimliği korunarak `3. 🧪 Kontrol Edilecek Çözümler` bölümüne taşınır.
-- Kullanıcı çözümü onayladığında aktif kayıt kaldırılır; kimlik, tarih ve commit özeti `PROJECT_HISTORY.md` dosyasına eklenir.
-- Reddedilen öneriler kimliğiyle birlikte `4. ❌ Reddedilen Öneriler` bölümünde kalır ve tekrar önerilmez.
+1. PT-007 ve PT-014: yedekleme, geri yükleme ve ilk migration güvenliği
+2. PT-006, PT-005 ve FTR-007: işlem, içe aktarma ve nakit doğruluğu
+3. PT-008 ve FTR-011: anahtar kasası ve bulut onayı
+4. Kalan analiz, fiyat, UI ve paketleme kontrolleri
 
 ---
 
 ## 📋 1. Yapılacaklar
 
-### TODO-001 — Piyasa Saatlerine Duyarlı Otomatik Yenileme
-
-- **Durum:** Açık
-- **Öncelik:** Orta
-- **Kaynak:** Mevcut kayıt
-- **Açıklama:** Mevcut `QTimer` yenilemesi piyasa takvimine ve işlem saatlerine göre yönetilmelidir.
-- **Kabul kriterleri:**
-  - [ ] Yenileme yalnızca yapılandırılan piyasa saatlerinde otomatik çalışır.
-  - [ ] Manuel yenileme piyasa saatinden bağımsız kullanılabilir.
-
-### TODO-002 — Ondalık Basamak Hassasiyeti
-
-- **Durum:** Açık
-- **Öncelik:** Düşük
-- **Kaynak:** Mevcut kayıt
-- **Açıklama:** TEFAS fonları ve küsüratlı lotlar için miktar/fiyat hassasiyeti 4–6 haneye göre ayarlanmalıdır.
-- **Kabul kriterleri:**
-  - [ ] Giriş, hesaplama ve gösterim katmanları aynı hassasiyet politikasını kullanır.
-  - [ ] Yuvarlama nedeniyle portföy toplamında maddi sapma oluşmaz.
-
-### TODO-003 — Veritabanı Composite İndeksleri
-
-- **Durum:** Açık
-- **Öncelik:** Düşük
-- **Kaynak:** Mevcut kayıt
-- **Açıklama:** `transactions` ve `price_history` sorguları için gerekli composite indeksler ölçüm yapılarak belirlenmelidir.
-- **Kabul kriterleri:**
-  - [ ] İndeks öncesi/sonrası sorgu planı veya süre ölçümü kaydedilir.
-  - [ ] İndeksler Alembic migration ile eklenir.
+*(Aktif yapılacak bulunmamaktadır.)*
 
 ---
 
 ## ⚠️ 2. Tespit Edilen Sorunlar ve Çözüm Önerileri
 
-### PT-001 — `datetime.utcnow()` Kullanımı
-
-- **Durum:** Açık
-- **Öncelik:** Düşük
-- **Kaynak:** Gemini 3.6 Flash
-- **Kayıt / son doğrulama:** 2026-08-08 / 2026-08-08
-- **İlgili dosyalar:** `app/models/asset.py`, `app/models/transaction.py`, `app/models/alert.py`
-- **Açıklama:** Python 3.12+ ile `datetime.utcnow()` kullanımı amortismana uğramıştır ve timezone bilgisi taşımayan zamanlar üretmektedir.
-- **Önerilen çözüm:** `datetime.now(timezone.utc)` veya veritabanı tarafında `func.now()` kullanılmalıdır.
-- **Kabul kriterleri:**
-  - [ ] Modeller timezone politikasıyla uyumlu tek bir zaman üretim yöntemi kullanır.
-  - [ ] Python 3.12 testlerinde ilgili deprecation uyarısı görülmez.
-
-### PT-002 — Loader Thread İçinde ORM Nesnelerinin Paylaşılması
-
-- **Durum:** Açık
-- **Öncelik:** Orta
-- **Kaynak:** Gemini 3.6 Flash
-- **Kayıt / son doğrulama:** 2026-08-08 / 2026-08-08
-- **İlgili dosyalar:** `app/viewmodels/portfolio_viewmodel.py`
-- **Açıklama:** `PortfolioLoaderThread`, SQLAlchemy oturumuna bağlı `Asset` nesnelerini `ThreadPoolExecutor` worker'larına aktarmaktadır.
-- **Önerilen çözüm:** Worker'lara yalnızca `(id, code, asset_type)` gibi ilkel ve immutable veriler gönderilmelidir.
-- **Kabul kriterleri:**
-  - [ ] Worker fonksiyonları ORM nesnesi veya Session kullanmaz.
-  - [ ] Çok varlıklı paralel yenileme testi kararlı biçimde geçer.
-
-### PT-003 — Test Oturumlarında SQLite Kaynak Yönetimi
-
-- **Durum:** Açık
-- **Öncelik:** Düşük
-- **Kaynak:** Gemini 3.6 Flash
-- **Kayıt / son doğrulama:** 2026-08-08 / doğrulama bekliyor
-- **İlgili dosyalar:** `tests/conftest.py`, SQLite fixture kullanan test dosyaları
-- **Açıklama:** Bazı test fixture'larında Session kapatılsa da Engine dispose edilmediği için kaynak uyarısı riski bulunmaktadır.
-- **Önerilen çözüm:** Fixture teardown aşamasında Session kapatılmalı ve Engine dispose edilmelidir.
-- **Kabul kriterleri:**
-  - [ ] Test paketi kaynak uyarıları hata kabul edilerek çalıştırıldığında başarılıdır.
-  - [ ] Tüm geçici Session ve Engine nesneleri teardown sırasında kapatılır.
-
-### PT-004 — Benchmark Servisinde Çevrimdışı Durum Yönetimi
-
-- **Durum:** Açık
-- **Öncelik:** Orta
-- **Kaynak:** Gemini 3.6 Flash
-- **Kayıt / son doğrulama:** 2026-08-08 / 2026-08-08
-- **İlgili dosyalar:** `app/services/benchmark_service.py`, `app/views/analytics_view.py`
-- **Açıklama:** Benchmark verisi alınamadığında boş sonuç yönetilse de kullanıcıya kaynağın çevrimdışı olduğu açık ve tutarlı biçimde bildirilmelidir.
-- **Önerilen çözüm:** Ağ hatası ViewModel tarafından durum nesnesine çevrilmeli ve View yalnızca bu durumu göstermelidir.
-- **Kabul kriterleri:**
-  - [ ] Çevrimdışı kullanım uygulamayı veya grafiği çökertmez.
-  - [ ] Kullanıcı veri bulunmaması ile bağlantı hatasını ayırt edebilir.
-
-### PT-005 — Excel Dışa Aktarımının Güvenli Biçimde Geri Alınamaması
-
-- **Durum:** Açık
-- **Öncelik:** Kritik
-- **Kaynak:** GPT-5
-- **Kayıt / son doğrulama:** 2026-08-08 / 2026-08-08
-- **İlgili dosyalar:** `app/services/import_export_service.py`, `tests/test_import_export.py`
-- **Açıklama:** Dışa aktarılan sütun adları içe aktarıcının beklediği adlarla uyuşmamaktadır. Tarihler ORM için normalize edilmemekte ve sayfa bazlı commit işlemleri kısmi aktarım riski oluşturmaktadır. Yeniden üretimde 100,1 TL maliyetli pozisyon 0 TL maliyetle geri alınmıştır.
-- **Önerilen çözüm:** Sütunlar kanonik şemaya normalize edilmeli, tüm alanlar doğrulanmalı ve dosyanın tamamı tek transaction içinde işlenmelidir.
-- **Kabul kriterleri:**
-  - [ ] Uygulamanın kendi Excel çıktısı tüm işlem türleriyle kayıpsız geri alınır.
-  - [ ] Hatalı bir satırda hiçbir satır veya varlık veritabanına commit edilmez.
-  - [ ] Gerçek SQLite ve gerçek Excel dosyası kullanan round-trip testi geçer.
-
-### PT-006 — Geçersiz ve Portföy Bakiyesini Aşan İşlemler
-
-- **Durum:** Açık
-- **Öncelik:** Kritik
-- **Kaynak:** GPT-5
-- **Kayıt / son doğrulama:** 2026-08-08 / 2026-08-08
-- **İlgili dosyalar:** `app/viewmodels/transaction_viewmodel.py`, `app/viewmodels/ai_viewmodel.py`, `app/services/portfolio_service.py`, `app/services/import_export_service.py`
-- **Açıklama:** Manuel, Excel ve asistan kaynaklı işlemler ortak doğrulamadan geçmemektedir. 10 adet varlığa karşı 15 adet satış bakiyeyi `-5` bırakmış ve maliyet yöntemine göre çelişkili kâr üretmiştir.
-- **Önerilen çözüm:** Tüm giriş kanallarının kullandığı merkezi, tip tanımlı bir `TransactionService` oluşturulmalıdır.
-- **Kabul kriterleri:**
-  - [ ] Negatif/sıfır değerler, geçersiz tarih ve fazla satış tüm giriş kanallarında reddedilir.
-  - [ ] Aynı doğrulama manuel, Excel, doğal dil ve görüntü aktarımında uygulanır.
-  - [ ] WAC/FIFO/LIFO fazla satış testleri aynı hata sonucunu verir.
-
-### PT-007 — Yedek Başarısız Olsa Bile Tüm Verilerin Silinmesi
-
-- **Durum:** Açık
-- **Öncelik:** Kritik
-- **Kaynak:** GPT-5
-- **Kayıt / son doğrulama:** 2026-08-08 / 2026-08-08
-- **İlgili dosyalar:** `app/viewmodels/settings_viewmodel.py`, `app/services/backup_service.py`
-- **Açıklama:** `delete_all_data()` yedek sonucunu kontrol etmeden silmeye devam etmektedir. Canlı SQLite dosyası ham dosya kopyasıyla yedeklenmekte ve geri yüklenecek dosyanın bütünlüğü doğrulanmamaktadır.
-- **Önerilen çözüm:** SQLite Backup API, bütünlük/şema kontrolü ve atomik restore akışı kullanılmalı; yedek başarısızsa silme durdurulmalıdır.
-- **Kabul kriterleri:**
-  - [ ] Yedekleme başarısız olduğunda hiçbir kullanıcı verisi silinmez.
-  - [ ] Bozuk veya yanlış şemalı dosya aktif veritabanının üzerine yazılmaz.
-  - [ ] Başarılı yedek için `quick_check=ok` doğrulanır.
-
-### PT-008 — Gemini API Anahtarının Loglara Sızabilmesi
-
-- **Durum:** Açık
-- **Öncelik:** Kritik
-- **Kaynak:** GPT-5
-- **Kayıt / son doğrulama:** 2026-08-08 / 2026-08-08
-- **İlgili dosyalar:** `app/services/ai/llm_provider.py`, `app/utils/app_settings.py`, `app/views/settings_view.py`
-- **Açıklama:** Anahtar URL query parametresiyle gönderildiği için HTTP hata metni üzerinden loglara sızabilir. Anahtar SQLite ayarlarında düz metin tutulmakta ve buluta gönderilen portföy kapsamı için açık onay bulunmamaktadır.
-- **Önerilen çözüm:** Anahtar güvenli header ve işletim sistemi anahtar zinciriyle yönetilmeli; loglar maskelenmeli ve ilk kullanım onayı alınmalıdır.
-- **Kabul kriterleri:**
-  - [ ] Hata logları ve kullanıcı mesajları API anahtarını içermez.
-  - [ ] Anahtar `portfolio.db` veya yedeklerinde düz metin bulunmaz.
-  - [ ] Bulut sağlayıcısı etkinleştirilmeden önce veri kapsamı onaylanır.
-
-### PT-009 — Performans ve K/Z Yüzdelerinin Yanıltıcı Olabilmesi
-
-- **Durum:** Açık
-- **Öncelik:** Yüksek
-- **Kaynak:** GPT-5
-- **Kayıt / son doğrulama:** 2026-08-08 / 2026-08-08
-- **İlgili dosyalar:** `app/viewmodels/portfolio_viewmodel.py`, `app/viewmodels/analytics_viewmodel.py`, `app/services/portfolio_service.py`, `app/services/snapshot_service.py`
-- **Açıklama:** Snapshot değişimleri nakit akışlarından arındırılmadığı için yeni alımlar performans gibi ölçülmektedir. Toplam K/Z yüzdesi de kapatılmış pozisyon kârını yalnızca açık pozisyon maliyetine bölebilmektedir.
-- **Önerilen çözüm:** Nakit hareketleri ayrı tutulmalı, TWR eklenmeli ve gerçekleşmiş/açık/toplam dönem getirileri ayrıştırılmalıdır.
-- **Kabul kriterleri:**
-  - [ ] Para yatırma veya çekme, fiyatlar değişmediğinde TWR'ı değiştirmez.
-  - [ ] K/Z metriklerinin pay ve paydası arayüzde açıklanır.
-  - [ ] Kapatılmış pozisyonlar toplam getiri yüzdesini yapay biçimde büyütmez.
-
-### PT-010 — XIRR Hesabının Yakınsamayan Sonucu Geçerli Kabul Etmesi
-
-- **Durum:** Açık
-- **Öncelik:** Yüksek
-- **Kaynak:** GPT-5
-- **Kayıt / son doğrulama:** 2026-08-08 / 2026-08-08
-- **İlgili dosyalar:** `app/services/portfolio_service.py`, `tests/test_portfolio_service.py`
-- **Açıklama:** Newton-Raphson yakınsamadığında son tahmin döndürülmektedir. Tek işaretli nakit akışları yaklaşık `1.98e277` gibi anlamsız sonuç üretebilmektedir.
-- **Önerilen çözüm:** İşaret kontrolü yapılmalı, güvenli aralıklı kök bulma kullanılmalı ve yakınsamama ayrı sonuç olarak modellenmelidir.
-- **Kabul kriterleri:**
-  - [ ] Tek işaretli nakit akışı `hesaplanamadı` sonucu verir.
-  - [ ] Bilinen -1000/+1100 yıllık örneği yaklaşık %10 verir.
-  - [ ] Sonlu olmayan veya aşırı büyük değer arayüze ulaşmaz.
-
-### PT-011 — Aynı Günlü İşlemlerin Belirsiz Sıralanması
-
-- **Durum:** Açık
-- **Öncelik:** Yüksek
-- **Kaynak:** GPT-5
-- **Kayıt / son doğrulama:** 2026-08-08 / 2026-08-08
-- **İlgili dosyalar:** `app/services/portfolio_service.py`, `app/models/transaction.py`
-- **Açıklama:** Maliyet hesabı yalnızca tarihe göre sıralandığından aynı günlü işlemlerin sonucu veritabanı dönüş sırasına bağlı kalabilir.
-- **Önerilen çözüm:** En az `(date, id)` sırası kullanılmalı; gerekirse gün içi `sequence` veya işlem zamanı alanı eklenmelidir.
-- **Kabul kriterleri:**
-  - [ ] Aynı veri farklı sorgu sıralarında aynı maliyet/K/Z sonucunu verir.
-  - [ ] Aynı gün alım, satış ve split sırası testlerle tanımlanır.
-
-### PT-012 — Manuel Yenilemenin Önbelleği Atlamaması
-
-- **Durum:** Açık
-- **Öncelik:** Orta
-- **Kaynak:** GPT-5
-- **Kayıt / son doğrulama:** 2026-08-08 / 2026-08-08
-- **İlgili dosyalar:** `app/views/main_window.py`, `app/viewmodels/portfolio_viewmodel.py`
-- **Açıklama:** `Şimdi Yenile` butonu varsayılan `load_data()` çağrısını yaptığı için 15 dakika içinde eski fiyatı gösterebilir.
-- **Önerilen çözüm:** Manuel akış `force_refresh=True` kullanmalı ve yükleme sırasında biriken zorunlu yenileme isteği korunmalıdır.
-- **Kabul kriterleri:**
-  - [ ] Manuel yenileme her fiyat servisinde cache bypass eder.
-  - [ ] Yükleme sürerken basılan manuel yenileme tamamlanınca zorunlu olarak çalışır.
-
-### PT-013 — TEFAS İstek Sınırının Paralel Çağrılarda Uygulanmaması
-
-- **Durum:** Açık
-- **Öncelik:** Yüksek
-- **Kaynak:** GPT-5
-- **Kayıt / son doğrulama:** 2026-08-08 / 2026-08-08
-- **İlgili dosyalar:** `app/services/tefas_service.py`, `app/viewmodels/portfolio_viewmodel.py`
-- **Açıklama:** Her worker'ın ayrı 500 ms beklemesi isteklerin eşzamanlı gönderilmesini engellemez; paylaşılan `Crawler` nesnesi de eşzamanlı kullanılmaktadır.
-- **Önerilen çözüm:** Süreç genelinde kilitli rate limiter kullanılmalı; crawler erişimi seri veya izole hale getirilmelidir.
-- **Kabul kriterleri:**
-  - [ ] Ardışık TEFAS istek başlangıçları arasında en az 500 ms bulunur.
-  - [ ] Aynı crawler birden fazla thread tarafından eşzamanlı kullanılmaz.
-
-### PT-014 — Veritabanı Migration ve Foreign Key Kontrolünün Olmaması
-
-- **Durum:** Açık
-- **Öncelik:** Yüksek
-- **Kaynak:** GPT-5
-- **Kayıt / son doğrulama:** 2026-08-08 / 2026-08-08
-- **İlgili dosyalar:** `app/database/engine.py`, `app/database/migrations/initial.sql`, `pyproject.toml`
-- **Açıklama:** `create_all()` mevcut tabloları yükseltmez. Alembic bağımlılığı olmasına rağmen migration zinciri yoktur ve foreign key kontrolü açıkça etkinleştirilmemiştir.
-- **Önerilen çözüm:** Sürümlü Alembic migration'ları oluşturulmalı; migration öncesi yedek alınmalı ve SQLite bağlantı pragma'ları merkezi uygulanmalıdır.
-- **Kabul kriterleri:**
-  - [ ] Önceki şemadaki örnek veritabanı veri kaybı olmadan güncellenir.
-  - [ ] Her uygulama bağlantısında `PRAGMA foreign_keys=ON` doğrulanır.
-  - [ ] Migration hatasında aktif veritabanı geri alınabilir kalır.
-
-### PT-015 — Paketleme Yapılandırmasının Temiz Klonda Çalışmaması
-
-- **Durum:** Açık
-- **Öncelik:** Yüksek
-- **Kaynak:** GPT-5
-- **Kayıt / son doğrulama:** 2026-08-08 / 2026-08-08
-- **İlgili dosyalar:** `pyproject.toml`, `.gitignore`, `portfolio_tracker.spec`, `main.py`
-- **Açıklama:** Alt paketler ve kaynak dosyaları kurulabilir pakete eksik girebilir. PyInstaller spec dosyası ignore edildiğinden README komutu temiz klonda tekrarlanamaz.
-- **Önerilen çözüm:** Package discovery/package-data tamamlanmalı, spec dosyası izlenmeli ve paket smoke testi CI'a eklenmelidir.
-- **Kabul kriterleri:**
-  - [ ] Temiz klondan wheel ve hedef platform paketi oluşturulur.
-  - [ ] Paket açıldığında ikon, font, QSS ve tüm alt modüller bulunur.
-  - [ ] Kurulan `portfolio-tracker` giriş noktası uygulamayı başlatır.
-
-### PT-016 — UI Thread'ini Donduran İşlemler ve Eksik Worker Kapanışı
-
-- **Durum:** Açık
-- **Öncelik:** Orta
-- **Kaynak:** GPT-5
-- **Kayıt / son doğrulama:** 2026-08-08 / 2026-08-08
-- **İlgili dosyalar:** `app/views/settings_view.py`, `app/viewmodels/portfolio_viewmodel.py`, `app/views/main_window.py`
-- **Açıklama:** Sağlayıcı bağlantı testi ve yüzdelik içe aktarım ana UI thread'inde ağ çağrısı yapabilir. Ana pencere kapanırken portföy loader için kontrollü iptal/bekleme yoktur.
-- **Önerilen çözüm:** Uzun işlemler ViewModel worker'larına taşınmalı; ilerleme, iptal ve kapanış protokolü eklenmelidir.
-- **Kabul kriterleri:**
-  - [ ] Ağ zaman aşımında pencere etkileşime açık kalır.
-  - [ ] Yenileme sırasında uygulama kapatıldığında çalışan thread uyarısı veya çökme oluşmaz.
-
-### PT-017 — View Katmanındaki Doğrudan Servis Bağımlılıkları
-
-- **Durum:** Açık
-- **Öncelik:** Orta
-- **Kaynak:** GPT-5
-- **Kayıt / son doğrulama:** 2026-08-08 / 2026-08-08
-- **İlgili dosyalar:** `app/views/analytics_view.py`, `app/views/settings_view.py`, `app/views/ai_assistant_view.py`
-- **Açıklama:** View dosyaları benchmark, hesaplama, sağlayıcı ve analiz servislerine doğrudan erişmektedir.
-- **Önerilen çözüm:** Servis çağrıları ve asenkron iş yönetimi ilgili ViewModel'lere taşınmalıdır.
-- **Kabul kriterleri:**
-  - [ ] View modülleri Model veya service modüllerini doğrudan import etmez.
-  - [ ] View yalnızca ViewModel sinyalleri ve render verisiyle çalışır.
-
-### PT-018 — Önbellek Sürelerinin Dokümantasyonla Uyuşmaması
-
-- **Durum:** Açık
-- **Öncelik:** Düşük
-- **Kaynak:** GPT-5
-- **Kayıt / son doğrulama:** 2026-08-08 / 2026-08-08
-- **İlgili dosyalar:** `app/utils/cache.py`, `app/services/currency_service.py`, `app/services/benchmark_service.py`, `app/services/tefas_service.py`
-- **Açıklama:** Kur, benchmark ve fon adı belgelenen farklı süreler yerine ortak 15 dakikalık TTL kullanmaktadır.
-- **Önerilen çözüm:** Cache kayıtları anahtar bazlı TTL kabul etmeli ve süreler teknik spesifikasyonla eşleşmelidir.
-- **Kabul kriterleri:**
-  - [ ] Fiyat, kur, benchmark ve fon adı için ayrı TTL testleri bulunur.
-  - [ ] Kod yorumları, teknik belge ve çalışma zamanı aynı süreleri gösterir.
-
-### PT-019 — Test ve CI Kapsamının Kritik Akışları İçermemesi
-
-- **Durum:** Açık
-- **Öncelik:** Orta
-- **Kaynak:** GPT-5
-- **Kayıt / son doğrulama:** 2026-08-08 / 2026-08-08
-- **İlgili dosyalar:** `.github/workflows/ci.yml`, `tests/`, `smoke_test.py`, `pyproject.toml`
-- **Açıklama:** 95 test, Ruff, MyPy ve yerel GUI smoke kontrolü başarılıdır; ancak gerçek Excel round-trip, fazla satış, yedek başarısızlığı, migration, ViewModel ve paketleme akışları CI'da yoktur.
-- **Önerilen çözüm:** Gerçek geçici SQLite kullanan entegrasyon testleri ile GUI smoke, MyPy ve paketleme adımları CI'a eklenmelidir.
-- **Kabul kriterleri:**
-  - [ ] PT-005, PT-006 ve PT-007 için gerçek entegrasyon testleri bulunur.
-  - [ ] CI test, Ruff, MyPy, GUI smoke ve paket smoke adımlarını çalıştırır.
-
-### PT-020 — Geliştirme Ortamı ve Bağımlılık Kaynaklarının Dağınıklığı
-
-- **Durum:** Açık
-- **Öncelik:** Düşük
-- **Kaynak:** GPT-5
-- **Kayıt / son doğrulama:** 2026-08-08 / 2026-08-08
-- **İlgili dosyalar:** `pyproject.toml`, `requirements.txt`, `.gitignore`, `.venv-test/`
-- **Açıklama:** Proje Python 3.11+ isterken yerel test ortamı Python 3.9.6 kullanmaktadır. Bağımlılıklar iki dosyada tekrarlanmakta ve `.coverage` ignore edilmemektedir.
-- **Önerilen çözüm:** Ortam 3.11/3.12 ile yenilenmeli, tek bağımlılık kaynağı belirlenmeli ve çalışma çıktıları ignore edilmelidir.
-- **Kabul kriterleri:**
-  - [ ] Yerel test ortamı desteklenen Python sürümünü kullanır.
-  - [ ] Runtime ve geliştirme bağımlılıklarının tek yetkili kaynağı vardır.
-  - [ ] Test çıktıları çalışma ağacında izlenmeyen dosya bırakmaz.
+*(Aktif sorun bulunmamaktadır.)*
 
 ---
 
 ## 🧪 3. Kontrol Edilecek Çözümler
 
-> Kodlaması tamamlanan madde, kullanıcı doğrulamasına kadar özgün `PT-*` kimliğiyle burada tutulur. Test adımları ve commit kimliği mutlaka yazılır.
+> Aşağıdaki değişiklikler kodlandı ve otomatik testlerden geçti. Kullanıcı manuel doğrulamayı tamamlayana kadar geçmiş dosyasına taşınmayacaktır.
 
-*(Şu anda kontrol bekleyen çözüm bulunmamaktadır.)*
+| Kimlik | Çözüm | Commit | Otomatik doğrulama | Kullanıcı kontrolü |
+|---|---|---|---|---|
+| PT-007 | **Kontrol Bekliyor.** [GPT-5] SQLite Backup API, `quick_check`, şema doğrulaması, güvenlik yedeği ve atomik restore eklendi; yedek başarısızsa veri silme başlamıyor. | `43b1d88` + `a2a970e` | `test_backup_service.py`: aktif yazma, bozuk şema, atomik restore ve güvenlik yedeği hatası; `test_security.py`: silme engeli. | Ayarlar > Veritabanı Bakımı'ndan yedek oluşturun, önizleyin ve geçici bir yedeği geri yükleyin; bozuk dosyanın reddedildiğini doğrulayın. |
+| PT-001 | **Kontrol Bekliyor.** [GPT-5] UTC zamanları ortak `UTCDateTime` türü ve timezone-aware üretimle standartlaştırıldı. | `134fbb1` | Migration testleri ve `pytest -W error`; Python 3.12 altında datetime uyarısı yok. | Yeni bir işlem oluşturup yeniden açın; oluşturulma zamanının kaybolmadığını doğrulayın. |
+| PT-003 | **Kontrol Bekliyor.** [GPT-5] Test fixture'ları Session kapatma ve Engine dispose garantisiyle düzenlendi. | `134fbb1` | 142 test `-W error` ile geçti; geçici SQLite kaynak uyarısı yok. | Manuel işlem gerekmez; CI test adımının temiz tamamlandığını kontrol edin. |
+| PT-014 | **Kontrol Bekliyor.** [GPT-5] Sürümlü Alembic zinciri, merkezi SQLite pragma'ları, migration öncesi yedek ve doğrulanmış geçici kopya üzerinde atomik yükseltme eklendi. | `134fbb1` + `a2a970e` | `test_migrations.py`: yeni/eski/bilinmeyen şema, veri taşıma ve zorlanmış migration hatasında aktif DB'nin korunması. | Gerçek DB'nin ayrı kopyısıyla uygulamayı açın; önizleme/onay, güvenlik yedeği ve başarılı açılışı doğrulayın. |
+| SIM-001 | **Kontrol Bekliyor.** [GPT-5] Elle tutulan `initial.sql` ve `dump_schema.py` kaldırıldı; tek şema kaynağı Alembic oldu. | `134fbb1` | Migration zinciri sıfırdan güncel şemayı kuruyor ve 0005 head sürümüne ulaşıyor. | Projede eski şema betiklerinin bulunmadığını, `alembic upgrade head` akışının çalıştığını kontrol edin. |
+| FTR-002 | **Kontrol Bekliyor.** [GPT-5] Çoklu portföy, salt-okunur “Tüm Portföyler” ve portföy bazlı izleme listesi eklendi. | `0f8214f` | `test_portfolio_account_service.py`: benzersiz portföy, varsayılan koruması ve konsolide izleme listesi. | İki portföy oluşturun; aynı varlığı ayrı izleme listelerine ekleyip konsolide görünümü kontrol edin. |
+| FTR-007 | **Kontrol Bekliyor.** [GPT-5] Nakit defteri; yatırma, çekme, düzeltme ve işlem nakit etkilerini tek zaman çizelgesinde birleştiriyor. | `0f8214f` + `b0e342c` | `test_cash_balance_combines_external_and_transaction_flows` ve `test_twr_is_neutral_to_external_deposit`. | Para yatırın, alım ve satış yapın; toplam değerin nakit + menkul kıymet olduğunu doğrulayın. |
+| TODO-002 | **Kontrol Bekliyor.** [GPT-5] Miktar ve fiyatlar `Decimal` ile 6 basamak; toplam para değerleri 2 basamak politikasına geçirildi. | `0f8214f` + `8013fd1` | `test_create_uses_six_decimal_precision` ve formatlama testleri. | `0,123456` adet/fiyatlı işlem girin; kayıt ve gösterimde hassasiyetin korunduğunu kontrol edin. |
+| TODO-003 | **Kontrol Bekliyor.** [GPT-5] Portföy-varlık-tarih-ID transaction indeksi eklendi; gereksiz price_history indeksi sorgu planıyla elendi. | `0f8214f` | `test_legacy_migration_infers_opening_cash_and_adds_query_index` içindeki `EXPLAIN QUERY PLAN` doğrulaması. | Uzun işlem geçmişinde varlık filtresi ve tarih sıralamasının akıcı kaldığını kontrol edin. |
+| PT-006 | **Kontrol Bekliyor.** [GPT-5] Bütün giriş kanalları kodlanmış hatalar üreten ortak `TransactionService` doğrulamasına bağlandı. | `8013fd1` | `test_transaction_service.py`: sıfır/negatif değer, gelecek tarih, split, masraf, fazla satış ve geçmiş bakiye testleri. | Pozisyondan fazla satış ve negatif masraf girmeyi deneyin; kayıt oluşmadan anlaşılır hata görünmelidir. |
+| PT-011 | **Kontrol Bekliyor.** [GPT-5] Aynı günlü işlemler `(date, id)` sırasıyla deterministik hale getirildi. | `8013fd1` | `test_same_day_order_is_deterministic_and_split_affects_later_sale`. | Aynı gün alım, split ve satış ekleyin; yeniden açınca adet ve maliyetin değişmediğini doğrulayın. |
+| PT-005 | **Kontrol Bekliyor.** [GPT-5] Excel tarih/sayı/başlık normalizasyonu ve bütün dosyayı kapsayan tek transaction eklendi. | `ce5c6cd` | `test_real_excel_round_trip_preserves_all_entities` ve `test_one_bad_row_blocks_entire_file`. | Dışa aktarın, yeni geçici DB'ye içe alın; portföy, işlem, nakit ve plan sayılarını karşılaştırın. |
+| FTR-006 | **Kontrol Bekliyor.** [GPT-5] Satır durumlu önizleme, varsayılan atlanan mükerrerler, tam rollback ve güvenli son-batch geri alma eklendi. | `ce5c6cd` + `a2a970e` | Import mükerrer/undo/rollback testleri ve `test_import_preview_disables_error_rows_and_apply_action`. | Hatalı ve mükerrer satırlı dosyayı açın; hatalı satır seçilememeli, mükerrer varsayılan kapalı olmalı. |
+| PT-008 | **Kontrol Bekliyor.** [GPT-5] Gemini anahtarı sistem kasasına taşındı, header kullanımı ve merkezi log maskeleme eklendi; düz metin migration ile siliniyor. | `0a84921` | `test_security.py`, `test_gemini_uses_api_key_header_not_url` ve `test_plaintext_gemini_key_is_removed_by_migration`. | Gemini anahtarını kaydedin; DB/yedek içinde anahtar metni bulunmadığını ve yeniden açınca yapılandırılmış göründüğünü kontrol edin. |
+| FTR-011 | **Kontrol Bekliyor.** [GPT-5] Sürümlü bulut veri onayı, gönderilecek alan listesi ve görüntü yükleme bildirimi eklendi. | `0a84921` + `a2a970e` | `test_cloud_provider_is_blocked_without_versioned_consent`; onaysız sağlayıcı çağrısı engelleniyor. | Gemini'yi ilk kez seçin; alan listesini görün, reddedince çağrı yapılmadığını doğrulayın. |
+| SIM-004 | **Kontrol Bekliyor.** [GPT-5] Sağlayıcı metinleri sabit ücretsiz iddiaları yerine güncel lisans, fiyat ve kota koşullarına bağlandı. | `0a84921` + `a2a970e` | README/UI metin denetimi, Ruff ve GUI smoke. | Ayarlar > Yapay Zeka bilgilendirmesinde sağlayıcı koşulları uyarısını kontrol edin. |
+| SIM-005 | **Kontrol Bekliyor.** [GPT-5] Doğal dil işlem ve görüntü aktarımı “Deneysel” olarak etiketlendi; kayıt öncesi doğrulama zorunlu kaldı. | `0a84921` | AI yardımcı testleri ve GUI smoke doğrulama diyaloglarını oluşturuyor. | Asistan sekmesinde iki deneysel etiketi ve kaydetmeden önce sonuç doğrulama ekranını kontrol edin. |
+| PT-002 | **Kontrol Bekliyor.** [GPT-5] Worker girdileri immutable DTO'lara çevrildi; ORM nesnesi ve Session thread'ler arasında taşınmıyor. | `6e2fccd` | `test_mvvm_architecture.py` ve paralel fiyat/yenileme testleri. | Çok varlıklı yenileme başlatın; arayüzün kararlı kaldığını doğrulayın. |
+| PT-004 | **Kontrol Bekliyor.** [GPT-5] Benchmark sonucu ViewModel üzerinden tipli durum nesnesiyle aktarılıyor; veri yokluğu ve bağlantı hatası ayrılıyor. | `6e2fccd` + `962bd54` | Fiyat fallback/çevrimdışı testleri ve GUI smoke benchmark render'ı. | İnterneti kapatıp Analiz ekranını açın; grafik çökmemeli ve çevrimdışı açıklaması görünmeli. |
+| PT-016 | **Kontrol Bekliyor.** [GPT-5] Bağlantı testi, import, PDF, bakım ve yenileme ilerleme/iptal sinyalli worker'lara taşındı; kapanışta `shutdown()` uygulanıyor. | `6e2fccd` + `a2a970e` | `test_views_do_not_own_threads`, `test_worker_shutdown_waits_for_running_task` ve GUI smoke kapanışı. | Yenileme veya bağlantı testi sürerken pencereyi kapatın; thread uyarısı ya da çökme olmamalı. |
+| PT-017 | **Kontrol Bekliyor.** [GPT-5] View katmanındaki servis/model/veritabanı importları kaldırıldı; ViewModel sinyalleri kullanılıyor. | `6e2fccd` | `test_views_do_not_import_models_database_or_services`. | Uygulamanın tüm sekmelerini dolaşın; veri yükleme ve işlemlerin aynı şekilde çalıştığını doğrulayın. |
+| TODO-001 | **Kontrol Bekliyor.** [GPT-5] BIST ve TEFAS için piyasa saatli, tatil/yarım gün ayarlı otomatik yenileme politikası eklendi; manuel yenileme bağımsız. | `962bd54` | `test_refresh_policy_market_hours_holidays_and_manual_override` ve yarım gün testi. | Saat/tatil ayarını değiştirin; otomatik yenilemeyi ve saat dışındaki manuel yenilemeyi kontrol edin. |
+| PT-012 | **Kontrol Bekliyor.** [GPT-5] Manuel yenileme daima `force_refresh=True`; çalışan yükleme sırasında gelen zorunlu istek korunuyor. | `962bd54` | `test_forced_refresh_is_preserved_while_loader_is_running` ve BIST/TEFAS force-refresh testleri. | Arka arkaya iki kez “Şimdi Yenile”ye basın; ikinci zorunlu yenilemenin ilkinden sonra çalıştığını kontrol edin. |
+| PT-013 | **Kontrol Bekliyor.** [GPT-5] TEFAS erişimi süreç genelinde kilitlendi ve başlangıçlar arasında en az 500 ms sınırı getirildi. | `962bd54` | `test_tefas_crawler_calls_are_process_serialized`. | Birden fazla TEFAS fonunu yenileyin; eşzamanlı çağrı hatası oluşmadığını kontrol edin. |
+| PT-018 | **Kontrol Bekliyor.** [GPT-5] Fiyat 15 dk, kur 24 saat, benchmark 6 saat ve fon adı 7 gün TTL politikasına geçirildi. | `962bd54` | `test_cache_honors_per_entry_ttl_with_fake_clock` ve servis önbellek testleri. | Manuel yenilemenin cache'i atladığını, normal açılışın mevcut cache'i kullandığını kontrol edin. |
+| FTR-008 | **Kontrol Bekliyor.** [GPT-5] Fiyat DTO'suna kaynak, fiyat tarihi, çekilme zamanı ve canlı/cache/eski/çevrimdışı durumu eklendi. | `962bd54` | BIST, TEFAS ve fallback testleri tipli sonuç durumlarını doğruluyor. | Portföy fiyat hücresinin ipucunda kaynak, fiyat tarihi ve tazelik durumunu kontrol edin. |
+| PT-009 | **Kontrol Bekliyor.** [GPT-5] Toplam değer, açık pozisyon getirisi, gerçekleşmiş/gerçekleşmemiş K/Z ve TWR ayrıldı; pay/payda bilgileri eklendi. | `b0e342c` | TWR yatırma nötrlüğü, eski snapshot güvenilirliği ve konsolide geçmiş testleri. | Fiyatı değiştirmeden para yatırın; TWR kartının değişmediğini kontrol edin. |
+| PT-010 | **Kontrol Bekliyor.** [GPT-5] XIRR işaret kontrollü aralıklı kök aramaya ve başarılı/hesaplanamadı/belirsiz tipli sonucuna geçirildi. | `b0e342c` + `a2a970e` | Bilinen %10, tek işaret, çoklu kök ve aşırı kök testleri. | Yetersiz nakit akışlı portföyde anlamsız dev sayı yerine “hesaplanamadı” göründüğünü kontrol edin. |
+| FTR-001 | **Kontrol Bekliyor.** [GPT-5] Geçmiş temettüler ve manuel planlar aynı ekranda; “ödendi” işlemi bağlı temettüyü atomik oluşturuyor. | `b0e342c` | `test_dividend_service.py`: bağlı işlem ve eldeki adedi aşma reddi. | Bir plan ekleyip ödendi yapın; adet ön dolumunu ve bağlı DIVIDEND işlemini kontrol edin. |
+| FTR-009 | **Kontrol Bekliyor.** [GPT-5] FIFO/LIFO açık lotları, WAC havuzu ve satış-lot eşleşmeleri analiz ekranına eklendi. | `b0e342c` | `test_fifo_returns_open_lots_and_sale_matches` ile WAC/FIFO/LIFO testleri. | Kademeli iki alım ve bir satış yapın; lot ekranındaki eşleşmeleri maliyet yöntemleri arasında karşılaştırın. |
+| FTR-003 | **Kontrol Bekliyor.** [GPT-5] Tipli tema paleti QSS, PyQtGraph ve QtCharts bileşenlerine ortak sinyalle uygulanıyor. | `c6e3664` | GUI smoke açık/koyu/sistem temalarını ve chart render yollarını çalıştırıyor. | Tema değiştirin; grafik, pasta, tablo ve odak renklerinin birlikte değiştiğini kontrol edin. |
+| FTR-004 | **Kontrol Bekliyor.** [GPT-5] Grafik hover/crosshair etkileşimi ve özet/tam denetim PDF seçenekleri eklendi. | `c6e3664` | `test_pdf_summary_and_audit_modes_create_files` ve GUI smoke grafik etkileşimleri. | Grafikte hover bilgisini deneyin; iki PDF türünü üretip tam rapordaki işlem/nakit/lot bölümlerini açın. |
+| FTR-005 | **Kontrol Bekliyor.** [GPT-5] Ayarlar tipli `AppSettings` yapısına taşındı; kullanılmayan `get_setting` ve yinelenen form sözlüğü kaldırıldı. | `c6e3664` | `test_accessibility_assigns_names_and_typed_settings_validate` ve MyPy. | Geçersiz ayar değerlerini değiştirip kaydedin; güvenli varsayılana döndüğünü kontrol edin. |
+| FTR-010 | **Kontrol Bekliyor.** [GPT-5] Bütünlük, yedek listesi/doğrulama, restore önizleme, taşınabilir yedek, optimize ve onaylı VACUUM bakım ekranına eklendi. | `c6e3664` | `test_database_maintenance_checks_lists_optimizes_and_vacuums`. | Ayarlar > Veritabanı Bakımı'nda bütünlük, optimize ve taşınabilir yedek işlemlerini çalıştırın. |
+| FTR-012 | **Kontrol Bekliyor.** [GPT-5] Erişilebilir ad/açıklama, odak görünümü, tab sırası, kısayollar, kapanabilir sidebar ve kaydırılabilir formlar eklendi. | `c6e3664` + `a2a970e` | Erişilebilirlik, import diyalogu ve GUI smoke testleri. | Yalnız klavyeyle Ctrl+1…7, Ctrl+R ve Ctrl+B kısayollarını; dar pencere sidebar davranışını kontrol edin. |
+| PT-015 | **Kontrol Bekliyor.** [GPT-5] Alt paket keşfi ve migration/QSS/font/ikon package-data tamamlandı; izlenen PyInstaller spec ve paket smoke girişi eklendi. | `a2a970e` | Wheel smoke ve macOS PyInstaller `--smoke-test`; CI üç platform paket matrisi. | Temiz klonda wheel veya PyInstaller paketi oluşturup `--smoke-test` çalıştırın. |
+| PT-019 | **Kontrol Bekliyor.** [GPT-5] CI sırası Ruff, MyPy, uyarıları hata sayan 142 test, GUI smoke, wheel girişi ve üç platform paket smoke olarak genişletildi. | `a2a970e` | Yerelde aynı sıra başarıyla çalıştırıldı; 142 test geçti. | GitHub Actions'ta validate ve macOS/Windows/Linux package işlerinin yeşil olduğunu kontrol edin. |
+| PT-020 | **Kontrol Bekliyor.** [GPT-5] Homebrew Python 3.12 ve `.venv` kuruldu; `pyproject.toml` tek bağımlılık kaynağı oldu; coverage/cache/paket çıktıları ignore edildi. | `a2a970e` | Python 3.12.13, editable kurulum, Ruff, MyPy ve test paketi doğrulandı. | Yeni `.venv` ile `pip install -e ".[dev]"` ve `portfolio-tracker --smoke-test` komutlarını çalıştırın. |
+| SIM-002 | **Kontrol Bekliyor.** [GPT-5] İki README kök belgede birleştirildi; `requirements.txt` kaldırıldı. | `a2a970e` | Wheel build metadata ve giriş noktası smoke doğrulaması. | Kurulum adımlarını yalnız kök README'yi kullanarak temiz ortamda uygulayın. |
+| SIM-003 | **Kontrol Bekliyor.** [GPT-5] Doğrudan kullanılmayan `requests` bağımlılığı çıkarıldı; güvenli kasa için `keyring` eklendi. | `a2a970e` | Editable kurulum ve keyring güvenli/güvensiz backend testleri. | `pip install -e ".[dev]"` sonrasında Ayarlar'da sistem kasası durumunu kontrol edin. |
 
 ---
 
 ## ❌ 4. Reddedilen Öneriler
-
-> Reddedilen madde kimliği, gerekçesi ve karar tarihiyle burada tutulur.
 
 *(Henüz reddedilen öneri bulunmamaktadır.)*
 
@@ -373,23 +98,4 @@ Kimlikler yeniden numaralandırılmaz ve başka bir madde için tekrar kullanıl
 
 ## 🚀 5. Geliştirme ve Özellik Önerileri
 
-- **FTR-001 — Temettü Takvimi ve Pasif Gelir Analizi** — **Kaynak:** Mevcut kayıt — Temettü gelirlerinin aylık/yıllık takibi ve temettü verimliliği metrikleri.
-- **FTR-002 — Çoklu Portföy ve İzleme Listesi** — **Kaynak:** Mevcut kayıt — Farklı yatırım stratejileri için ayrı portföyler ve henüz alınmamış varlıklar için izleme listesi.
-- **FTR-003 — Dinamik QSS ve Grafik Tema Senkronizasyonu** — **Kaynak:** Mevcut kayıt — Tema değişiminde PyQtGraph ve QtCharts renklerinin QSS ile tam senkronizasyonu.
-- **FTR-004 — PDF Rapor ve Grafik Araç İpuçları** — **Kaynak:** Mevcut kayıt — Portföy özetinin PDF çıktısı ve zaman serilerinde hover tooltip desteği.
-- **FTR-005 — `app_settings.py` Temizliği** — **Kaynak:** Mevcut kayıt — Kullanılmayan ayar yardımcılarının tespit edilip kaldırılması.
-- **FTR-006 — Güvenli İçe Aktarım Önizlemesi** — **Kaynak:** GPT-5 — Satır bazlı önizleme, hata açıklaması, mükerrer kayıt tespiti ve tek adımlı geri alma.
-- **FTR-007 — Nakit Hesabı ve TWR Analizi** — **Kaynak:** GPT-5 — Para yatırma/çekme hareketleri ve nakit akışından arındırılmış zaman-ağırlıklı getiri.
-- **FTR-008 — Veri Tazeliği ve Kaynak Göstergesi** — **Kaynak:** GPT-5 — Fiyat kaynağı, fiyat tarihi, son başarılı yenileme ve çevrimdışı/önbellek rozeti.
-- **FTR-009 — Lot ve Gerçekleşmiş K/Z Dökümü** — **Kaynak:** GPT-5 — FIFO/LIFO partilerinin satışlarla eşleşmesini gösteren ayrıntılı rapor.
-- **FTR-010 — Veritabanı Bakım Ekranı** — **Kaynak:** GPT-5 — Bütünlük kontrolü, yedek doğrulama, geri yükleme önizlemesi ve taşınabilir yedek.
-- **FTR-011 — Bulut Gizliliği ve Finansal Bilgilendirme** — **Kaynak:** GPT-5 — Gönderilen veri kapsamı, ilk kullanım onayı ve öneri ekranı bilgilendirmesi.
-- **FTR-012 — Erişilebilirlik ve Klavye Akışları** — **Kaynak:** GPT-5 — Kısayollar, odak sırası, ekran okuyucu etiketleri, kontrast ve küçük ekran uyumu.
-
-### Sadeleştirme ve Kaldırma Önerileri
-
-- **SIM-001 — Tek Şema Kaynağı** — **Kaynak:** GPT-5 — Alembic devreye alındıktan sonra `dump_schema.py` ve elle tutulan `initial.sql` kaldırılmalı veya otomatik çıktı olmalıdır.
-- **SIM-002 — Tek Dokümantasyon ve Bağımlılık Kaynağı** — **Kaynak:** GPT-5 — İki README birleştirilmeli; runtime ve geliştirme bağımlılıklarının çift tanımı kaldırılmalıdır.
-- **SIM-003 — Kullanılmayan Bağımlılıkların Temizlenmesi** — **Kaynak:** GPT-5 — Kodda doğrudan kullanılmayan `requests` gibi bağımlılıklar doğrulanarak kaldırılmalıdır.
-- **SIM-004 — Değişken Sağlayıcı İddialarının Sadeleştirilmesi** — **Kaynak:** GPT-5 — "Tamamen ücretsiz" yerine fiyatlandırma ve kotaların sağlayıcı koşullarına bağlı olduğu belirtilmelidir.
-- **SIM-005 — Deneysel Özellik İşaretlemesi** — **Kaynak:** GPT-5 — Temel veri doğruluğu düzelene kadar asistanın işlem kaydetme ve görüntü aktarımı deneysel işaretlenmelidir.
+*(Aktif öneri bulunmamaktadır; tüm kayıtlar kullanıcı kontrolü beklemektedir.)*
