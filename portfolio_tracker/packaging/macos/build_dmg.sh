@@ -4,7 +4,8 @@ set -euo pipefail
 dist_dir="${1:-dist}"
 release_dir="${2:-release}"
 version="${3:-1.0.0}"
-app_path="${dist_dir}/PortfolioTracker.app"
+app_name="Portföy Takip.app"
+app_path="${dist_dir}/${app_name}"
 
 if [[ ! -d "${app_path}" ]]; then
     echo "Uygulama paketi bulunamadı: ${app_path}" >&2
@@ -22,9 +23,9 @@ cleanup() {
 }
 trap cleanup EXIT
 
-ditto "${app_path}" "${staging_dir}/Portföy Takip.app"
+ditto "${app_path}" "${staging_dir}/${app_name}"
 ln -s /Applications "${staging_dir}/Applications"
-codesign --verify --deep --strict "${staging_dir}/Portföy Takip.app"
+codesign --verify --deep --strict "${staging_dir}/${app_name}"
 hdiutil create \
     -volname "Portföy Takip" \
     -srcfolder "${staging_dir}" \

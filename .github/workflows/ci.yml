@@ -69,7 +69,7 @@ jobs:
           - os: ubuntu-latest
             executable: portfolio_tracker/dist/PortfolioTracker/PortfolioTracker
           - os: macos-latest
-            executable: portfolio_tracker/dist/PortfolioTracker.app/Contents/MacOS/PortfolioTracker
+            executable: portfolio_tracker/dist/Portföy Takip.app/Contents/MacOS/PortfolioTracker
           - os: windows-latest
             executable: portfolio_tracker/dist/PortfolioTracker/PortfolioTracker.exe
     runs-on: ${{ matrix.os }}

@@ -8,6 +8,8 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 PROJECT_ROOT = Path(SPECPATH)
 MACOS_ICON = PROJECT_ROOT / "app/resources/app_icon.icns"
 WINDOWS_ICON = PROJECT_ROOT / "app/resources/app_icon.ico"
+MACOS_BUNDLE_NAME = "Portföy Takip.app"
+MACOS_BUNDLE_IDENTIFIER = "com.talat.portfoytakip"
 
 datas = [
     (str(PROJECT_ROOT / "app/resources"), "app/resources"),
@@ -72,7 +74,8 @@ coll = COLLECT(
 if sys.platform == "darwin":
     app = BUNDLE(
         coll,
-        name="PortfolioTracker.app",
+        name=MACOS_BUNDLE_NAME,
         icon=str(MACOS_ICON),
-        bundle_identifier="com.portfoliotracker.desktop",
+        bundle_identifier=MACOS_BUNDLE_IDENTIFIER,
+        version="1.0.0",
     )
