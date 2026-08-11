@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       QT_QPA_PLATFORM: offscreen
-      PORTFOLIO_TRACKER_DATA_DIR: ${{ runner.temp }}/portfolio-test-data
+      PORTFOLIO_TRACKER_DATA_DIR: ${{ github.workspace }}/.tmp/portfolio-test-data
     steps:
       - uses: actions/checkout@v4
 
@@ -75,7 +75,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     env:
       QT_QPA_PLATFORM: offscreen
-      PORTFOLIO_TRACKER_DATA_DIR: ${{ runner.temp }}/portfolio-package-data
+      PORTFOLIO_TRACKER_DATA_DIR: ${{ github.workspace }}/.tmp/portfolio-package-data
       PACKAGED_EXECUTABLE: ${{ matrix.executable }}
     steps:
       - uses: actions/checkout@v4
