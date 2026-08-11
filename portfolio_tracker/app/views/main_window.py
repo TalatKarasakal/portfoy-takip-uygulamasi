@@ -17,6 +17,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from app.utils.app_icon import apply_application_icon
+
 
 class MainWindow(QMainWindow):
     theme_changed = Signal(str, object)
@@ -26,6 +28,14 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Portföy Takip ve Analiz")
         self.setMinimumSize(800, 600)
         self.current_theme = "dark"
+        self._theme_preference = "system"
+
+        try:
+            QApplication.styleHints().colorSchemeChanged.connect(
+                self._on_system_theme_changed
+            )
+        except (AttributeError, RuntimeError):
+            pass
 
         # Ana Layout (Yatay: Sol Sidebar, Sağ İçerik)
         central_widget = QWidget()
@@ -246,8 +256,9 @@ class MainWindow(QMainWindow):
         return "dark"
 
     def apply_theme(self, settings_dict):
-        theme = settings_dict.get("theme", "system")
-        if theme == "system":
+        self._theme_preference = str(settings_dict.get("theme", "system"))
+        theme = self._theme_preference
+        if self._theme_preference == "system":
             theme = self._detect_system_theme()
         self.current_theme = theme
 
@@ -260,7 +271,12 @@ class MainWindow(QMainWindow):
 
         from app.config import get_palette
 
+        apply_application_icon(theme, self)
         self.theme_changed.emit(theme, get_palette(theme))
+
+    def _on_system_theme_changed(self, _scheme) -> None:
+        if self._theme_preference == "system":
+            self.apply_theme({"theme": "system"})
 
     def toggle_sidebar(self):
         self.sidebar.setVisible(not self.sidebar.isVisible())

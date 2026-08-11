@@ -3,6 +3,7 @@ import sqlite3
 import time
 
 import pytest
+from PySide6.QtGui import QColor, QImage
 from PySide6.QtWidgets import (
     QApplication,
     QDialogButtonBox,
@@ -23,6 +24,7 @@ from app.services.import_export_service import (
     ImportRowStatus,
 )
 from app.services.report_service import ReportMode, export_portfolio_pdf
+from app.utils.app_icon import apply_application_icon, icon_path_for_theme
 from app.utils.app_settings import AppSettings
 from app.viewmodels.worker import FunctionWorker, stop_worker
 from app.views.accessibility import apply_accessibility
@@ -108,6 +110,25 @@ def test_accessibility_assigns_names_and_typed_settings_validate(qt_app):
     assert settings.theme == "system"
     assert settings.default_currency == "TRY"
     assert settings.cost_method == "WAC"
+
+
+def test_theme_icons_preserve_artwork_and_switch_background(qt_app, monkeypatch):
+    light_path = icon_path_for_theme("light")
+    dark_path = icon_path_for_theme("dark")
+    light = QImage(str(light_path))
+    dark = QImage(str(dark_path))
+
+    assert not light.isNull() and light.size() == dark.size()
+    assert light.pixelColor(0, 0) == QColor("#FFFFFF")
+    assert dark.pixelColor(0, 0) == QColor("#0F1115")
+    assert light.pixelColor(512, 512) == dark.pixelColor(512, 512)
+
+    dock_icons = []
+    monkeypatch.setattr("app.utils.app_icon.set_dock_icon", dock_icons.append)
+    window = QWidget()
+    assert apply_application_icon("light", window) == light_path
+    assert not window.windowIcon().isNull()
+    assert dock_icons == [str(light_path)]
 
 
 def test_import_preview_disables_error_rows_and_apply_action(qt_app):

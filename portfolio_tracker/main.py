@@ -22,6 +22,8 @@ def _run_smoke_check() -> int:
         Path(ROOT_DIR) / "app/resources/styles/dark.qss",
         Path(ROOT_DIR) / "app/resources/styles/light.qss",
         Path(ROOT_DIR) / "app/resources/app_icon.png",
+        Path(ROOT_DIR) / "app/resources/app_icon_light.png",
+        Path(ROOT_DIR) / "app/resources/app_icon_dark.png",
         Path(ROOT_DIR) / "app/database/migrations/env.py",
         Path(ROOT_DIR) / "app/database/migrations/versions/0001_initial.py",
     )
