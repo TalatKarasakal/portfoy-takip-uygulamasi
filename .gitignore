@@ -23,6 +23,7 @@ htmlcov/
 # Packaging
 dist/
 build/
+release/
 *.spec
 !portfolio_tracker/portfolio_tracker.spec
 

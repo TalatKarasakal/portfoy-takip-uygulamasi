@@ -60,6 +60,8 @@ app = [
     "database/migrations/*.mako",
     "database/migrations/versions/*.py",
     "resources/*.png",
+    "resources/*.icns",
+    "resources/*.ico",
     "resources/fonts/*.ttf",
     "resources/styles/*.qss",
 ]

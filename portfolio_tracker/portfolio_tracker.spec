@@ -6,6 +6,8 @@ from pathlib import Path
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 PROJECT_ROOT = Path(SPECPATH)
+MACOS_ICON = PROJECT_ROOT / "app/resources/app_icon.icns"
+WINDOWS_ICON = PROJECT_ROOT / "app/resources/app_icon.ico"
 
 datas = [
     (str(PROJECT_ROOT / "app/resources"), "app/resources"),
@@ -55,6 +57,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    icon=str(WINDOWS_ICON) if sys.platform == "win32" else None,
 )
 
 coll = COLLECT(
@@ -70,6 +73,6 @@ if sys.platform == "darwin":
     app = BUNDLE(
         coll,
         name="PortfolioTracker.app",
-        icon=None,
+        icon=str(MACOS_ICON),
         bundle_identifier="com.portfoliotracker.desktop",
     )

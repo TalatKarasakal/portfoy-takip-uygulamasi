@@ -89,6 +89,26 @@ pyinstaller --noconfirm portfolio_tracker.spec
 
 PyInstaller tanımı migration dosyalarını, QSS temalarını, fontları ve uygulama ikonunu pakete ekler. CI; Ruff, MyPy, uyarıları hata sayan testler, başsız GUI smoke testi, wheel giriş noktası ve macOS/Windows/Linux PyInstaller smoke kontrollerini çalıştırır.
 
+### Kurulum dosyaları
+
+Apple Silicon macOS DMG dosyası:
+
+```bash
+cd portfolio_tracker
+pyinstaller --noconfirm --clean portfolio_tracker.spec
+bash packaging/macos/build_dmg.sh dist release 1.0.0
+```
+
+Windows x64 Setup.exe dosyası Windows üzerinde Inno Setup 6 ile üretilir:
+
+```powershell
+cd portfolio_tracker
+pyinstaller --noconfirm --clean portfolio_tracker.spec
+.\packaging\windows\build_installer.ps1 -SourceDir dist\PortfolioTracker -OutputDir release -Version 1.0.0
+```
+
+CI, macOS ve Windows kurulum dosyalarını SHA-256 dosyalarıyla birlikte ayrı artefaktlar olarak yükler. Yerel çıktılar `portfolio_tracker/release/` altında oluşur. Sertifika sağlanmadığında paketler kişisel kurulum için imzasızdır; genel dağıtımda Apple Developer ID/notarization ve Windows Authenticode imzası kullanılmalıdır.
+
 ## Mimari
 
 Uygulama MVVM katmanlarına ayrılmıştır: View yalnızca ViewModel sinyalleri ve render verileriyle çalışır; SQLAlchemy modelleri ile servisler ViewModel katmanının arkasındadır. Uzun işlemler Session veya ORM nesnesi taşımayan worker'larda yürütülür. Ayrıntılı şema ve tasarım kararları [mimari dokümanında](docs/architecture_and_spec.md) bulunur.

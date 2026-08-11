@@ -1,6 +1,7 @@
 name: CI
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
   pull_request:
@@ -118,3 +119,46 @@ jobs:
           if not executable.is_file():
               raise SystemExit(f"Paket giriş noktası bulunamadı: {executable}")
           subprocess.run([str(executable), "--smoke-test"], check=True)
+
+      - name: Build macOS DMG
+        if: runner.os == 'macOS'
+        shell: bash
+        run: >-
+          bash portfolio_tracker/packaging/macos/build_dmg.sh
+          portfolio_tracker/dist
+          portfolio_tracker/release
+          1.0.0
+
+      - name: Install Inno Setup
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: choco install innosetup --no-progress -y
+
+      - name: Build Windows installer
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: >-
+          & ./portfolio_tracker/packaging/windows/build_installer.ps1
+          -SourceDir dist/PortfolioTracker
+          -OutputDir release
+          -Version 1.0.0
+
+      - name: Upload macOS installer
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: PortfolioTracker-macOS-${{ runner.arch }}
+          path: |
+            portfolio_tracker/release/*.dmg
+            portfolio_tracker/release/*.sha256
+          if-no-files-found: error
+
+      - name: Upload Windows installer
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: PortfolioTracker-Windows-x64
+          path: |
+            portfolio_tracker/release/*.exe
+            portfolio_tracker/release/*.sha256
+          if-no-files-found: error
