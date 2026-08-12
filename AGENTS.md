@@ -24,5 +24,13 @@ Uygulamanın veritabanı şeması, maliyet hesaplama yöntemleri, veri servisler
 ## Klasör Yapısı
 Proje, `portfolio_tracker/` altındaki modüler yapıya (`app/models`, `app/views`, `app/viewmodels`, `app/services`, `tests/`) göre düzenlenmiştir.
 
+## Proje Takip Belgesi (`PROJECT_TRACKER.md`) Kullanım Kuralları
+- Uygulama sorunları, yapılacaklar, öneriler ve onay bekleyen çözümler [PROJECT_TRACKER.md](file:///Users/talatkarasakal/Documents/GitHub/portfoy-takip-uygulaması/PROJECT_TRACKER.md) dosyasında tutulur.
+- **Token Tasarrufu:** Agent'lar bu dosyayı her oturumda gereksiz yere baştan sona okumaz. Yalnızca kullanıcı takip durumunu sorduğunda veya sıradaki göreve başlarken okur.
+- **Çözüm Onay Süreci:** Bir agent bir sorunu çözüp kodladığında, çözümü `3. 🧪 Kontrol Edilecek Çözümler` başlığı altına ekler ve kullanıcıdan test edip onaylamasını ister. Kullanıcı doğruladıktan sonra ilgili madde belgeden kaldırılır.
+- **Model İsmi:** Önerilen çözümlere öneriyi yapan modelin adı eklenir (Örn: `[Gemini 3.6 Flash]`).
+- **Reddedilen Öneriler:** Kullanıcı bir öneriyi reddederse, tekrar önerilmesini önlemek için `4. ❌ Reddedilen Öneriler` bölümüne eklenir.
+
 ## Beklenti
 Doğru çalışması ve verinin güvende olması önceliklidir. Kod okunabilir, modüler ve tip tanımlı (type hints) olmalıdır. Şüpheye düştüğün yerde yorum satırında belirt ve varsayım yap.
+
